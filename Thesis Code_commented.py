@@ -9,6 +9,7 @@ import time
 import numpy as np
 from itertools import permutations
 import pandas as pd
+from optimizer import run_wb_mod_optimizer
 
 # =============================================================================
 # # ORR PARAMETERS
@@ -17,7 +18,8 @@ import pandas as pd
 # Available options:
 # "IM": Immediate Release - Jobs are released as soon as they arrive.
 # "WL_DIRECT": Workload Limiting - Releases jobs only if workload norms are not exceeded.
-# "HUMAN_CENTRIC": Human-centric WL, considers human and machine capacities separately.
+# "HUMAN_CENTRIC": Human-Centric - Prioritizes jobs requiring human interaction.
+# "WB_MOD": Workload Balancing (optimization-driven)
 RELEASE_RULE="HUMAN_CENTRIC"
 # If True, a starving machine can pull a job from the pre-shop pool, bypassing the release rule.
 STARVATION_AVOIDANCE = False 
@@ -29,6 +31,7 @@ STARVATION_AVOIDANCE = False
 # "static": Workers are fixed to their primary station.
 # "reactive": Workers can move to other stations based on simple rules (e.g., queue length).
 # "flexible": Workers can be reallocated based on more complex logic (output control), often tied to WL_MOD/WB_MOD.
+# "plan_following": Workers follow a centrally computed labor adjustment plan from WB_MOD.
 WORKER_MODE = "reactive"
 # Defines the skill set of workers across different stations.
 # "mono": Workers are skilled at only one station.
@@ -39,11 +42,11 @@ WORKER_MODE = "reactive"
 # "triangular": Skills decrease as the distance from the home station increases.
 WORKER_FLEXIBILITY  = "triangular"
 # Efficiency loss when a worker operates at a non-primary station (e.g., 0.1 for 10% loss).
-WORKER_EFFICIENCY_DECREMENT  = 0
+WORKER_EFFICIENCY_DECREMENT  = 0.25
 # Time required for a worker to move from one station to another.
-TRANSFER_TIME = 0
+TRANSFER_TIME = 3
 # Minimum time a worker must stay at a station after being transferred.
-PERMANENCE_TIME = 0
+PERMANENCE_TIME = 60
 
 # =============================================================================
 # # SHOP PARAMETERS
@@ -92,6 +95,22 @@ ABSENTEEISM_LEVELS = {
     "high": 0.15     # 15% of the workforce is absent.
 }
 
+# =============================================================================
+# # NEW PARAMETERS FOR WB_MOD, DYNAMIC CAPS, URGENT VALVE
+# =============================================================================
+# Horizon for the WB_MOD optimizer (e.g., 5-10 periods)
+REVIEW_HORIZON_T = 5
+# Parameters for the WB_MOD optimizer objective function
+WB_MOD_PARAMS = {
+    "rho": 1.5,             # Penalty for overload
+    "kappa": 0.1,           # Penalty for labor adjustments
+    "weights_decay": 0.5    # Geometric decay for time-weighted objective
+}
+# Enable/disable dynamic capacity adjustments
+DYNAMIC_CAPS_ENABLED = False
+# Enable/disable the urgent job release valve
+URGENT_VALVE_ENABLED = False
+
 ### USE IF DYNAMIC SYSTEM ###
 
 
@@ -106,20 +125,22 @@ CONSTRAINT_SCENARIOS = {
 # Enhanced parameter structure
 PAR1 = [
     # [Release_Rule, Worker_Mode, Starvation_Avoidance, Constraint_Scenario, Absenteeism_Level]
-    ["HUMAN_CENTRIC", "reactive", False, "baseline", "none"],
-    ["HUMAN_CENTRIC", "reactive", False, "human_constrained", "none"],
-    ["HUMAN_CENTRIC", "reactive", False, "dynamic_switching", "none"],
-   # ["WL_DIRECT", "static", False, "baseline", "none"],
-    #["WL_DIRECT", "static", False, "human_constrained", "none"], 
-    #["WL_DIRECT", "static", False, "dynamic_switching", "none"],
+    ["HUMAN_CENTRIC", "reactive", False, "baseline", "high"],
+    ["HUMAN_CENTRIC", "reactive", False, "human_constrained", "high"],
+    ["HUMAN_CENTRIC", "reactive", False, "dynamic_switching", "high"],
+    # ["WB_MOD", "reactive", False, "baseline", "none"],
+    # ["WB_MOD", "reactive", False, "human_constrained", "none"],
+    # ["WB_MOD", "reactive", False, "dynamic_switching", "none"],
+    # ["WL_DIRECT", "static", False, "baseline", "none"],
+    # ["WL_DIRECT", "static", False, "human_constrained", "none"], 
+    # ["WL_DIRECT", "static", False, "dynamic_switching", "none"],
 ]
 
 # Global variables for current constraints
 CURRENT_HUMAN_NORM = 1000
 CURRENT_MACHINE_NORM = 1000
-CONSTRAINT_SCENARIO = "baseline"
+CONSTRAINT_SCENARIO = "dynamic_switching"
 """
-
 # =============================================================================
 # # SIMULATION CONFIGURATION
 # =============================================================================
@@ -148,8 +169,8 @@ for config in PAR2:
     ### USE IF DYNAMIC SYSTEM ###
 
     
-    #CONSTRAINT_SCENARIO = config[3] 
-    #ABSENTEEISM_LEVEL = ABSENTEEISM_LEVELS[config[4]]  
+    CONSTRAINT_SCENARIO = config[3] 
+    ABSENTEEISM_LEVEL = ABSENTEEISM_LEVELS[config[4]]  
     SHOP_FLOW=config[5]
     SHOP_LENGTH=config[6]
 
@@ -166,7 +187,7 @@ for config in PAR2:
     WORKLOAD_NORMS = [1000]  # Single value for dual constraint system
     WLIndex = 0
     
-
+    """
     if   RELEASE_RULE=="PR" or RELEASE_RULE=="IM":
         WORKLOAD_NORMS=[0]
     else:
@@ -180,7 +201,7 @@ for config in PAR2:
             WORKLOAD_NORMS = [5400, 6600, 7800, 9600, 28800]
         elif SHOP_FLOW=="undirected" and SHOP_LENGTH=="variable":
             WORKLOAD_NORMS = [2700, 3600, 4800, 7200, 28800]
-
+    """
     N_WORKERS = 5
 
     N_PHASES = 5                # Machines/Workers
@@ -388,6 +409,7 @@ for config in PAR2:
             self.__tardy__= None
             self.__tardiness__ = None
             self.__lateness__=None
+            self.force_released = False
 
         # ... rest of your methods remain the same ...
         def get_current_machine(self):
@@ -715,6 +737,7 @@ for config in PAR2:
             self.system = system
 
             self.released_workload = list(0 for i in range(N_PHASES))
+            self.Forced_releases_count = 0
 
             # --- Router for selecting the release algorithm ---
             # Based on the 'rule' parameter, the corresponding SimPy process is started.
@@ -732,6 +755,8 @@ for config in PAR2:
                     self.env.process(self.Human_Centric_release(480, workload_norm))
                 elif SHOP_FLOW == "directed":
                     self.env.process(self.Human_Centric_release_directed(480,workload_norm))
+            elif rule == "WB_MOD":
+                self.env.process(self.WB_MOD_release(480)) # Period can be configured
             else:
                 print("Release algorithm not recognised in Orders_release")
                 exit()
@@ -765,11 +790,50 @@ for config in PAR2:
                 self.PoolUpstream.waiting_new_jobs.append(waiting_new_jobs_event)
                 yield waiting_new_jobs_event
 
+        def _urgent_job_valve(self):
+            if not URGENT_VALVE_ENABLED:
+                return
+
+            # Create a temporary list to iterate over, as we will modify the pool
+            unreleased_jobs = list(self.PoolUpstream.get_list())
+
+            # Use a list to store jobs that will be force-released to avoid modifying the list while iterating
+            jobs_to_force_release = []
+
+            for job in unreleased_jobs:
+                # Trigger: PRD (DueDate) is in the past or present
+                if job.DueDate <= self.env.now:
+                    # Policy: Station-idle valve
+                    first_station_id = job.get_current_machine()
+                    first_station = self.system.Machines[first_station_id]
+
+                    # A station is idle if it has no job being processed and its WIP queue is empty
+                    if first_station.current_job is None and len(first_station.PoolUpstream) == 0:
+                        jobs_to_force_release.append(job)
+
+            # Now, iterate through the jobs marked for force-release
+            for job in jobs_to_force_release:
+                # Remove the job from the upstream pool
+                # This is inefficient, but necessary as we don't have job IDs in the pool
+                for i, pool_job in enumerate(self.PoolUpstream.array):
+                    if pool_job.id == job.id:
+                        self.PoolUpstream.delete(i)
+                        break
+
+                # Release the job
+                job.ReleaseDate = self.env.now
+                job.force_released = True # Tag the job
+                self.Forced_releases_count += 1
+                self.Pools[job.get_current_machine()].append(job)
+
+                if SCREEN_DEBUG:
+                    print(f"URGENT VALVE: Force-releasing job {job.id} at time {self.env.now:.2f}")
+
         def WL_Direct_release(self, period, workload_norm):
             """
             WL_Direct rule: LUMS-COR compliant with routing-only loads and PRD sorting
             """
-            def evaluateJob(self, job, phases_load):
+            def evaluateJob(self, job, phases_load, system):
                 job_CAW = job.get_CAW_routing_only()
                 
                 # Check only stations in the job's routing
@@ -778,8 +842,11 @@ for config in PAR2:
                     load_to_compare = job_CAW[station_id]
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
                         load_to_compare *= MACHINE_RATIO
-                    
-                    if (phases_load[station_id] + load_to_compare > (workload_norm)/N_PHASES):
+                    if DYNAMIC_CAPS_ENABLED:
+                        limit = system.Cap_mach[station_id]
+                    else:
+                        limit = workload_norm / N_PHASES
+                    if (phases_load[station_id] + load_to_compare > limit):
                         return False
                 
                 job.ReleaseDate = self.env.now
@@ -808,16 +875,17 @@ for config in PAR2:
                 
                 # Process jobs in PRD order
                 for job in jobs_to_evaluate:
-                    if not evaluateJob(self, job, phases_load):
+                    if not evaluateJob(self, job, phases_load,self.system):
                         self.PoolUpstream.append(job)
-                    
+
+                self._urgent_job_valve()    
                 yield env.timeout(period)
 
         def WL_Direct_release_directed(self, period, workload_norm):
             """
             WL_Direct rule: LUMS-COR compliant for directed flow
             """
-            def evaluateJob(self, job, phases_load):
+            def evaluateJob(self, job, phases_load, system):
                 job_CSL = job.get_CSL_routing_only()
                 
                 # Check only stations in the job's routing
@@ -827,7 +895,12 @@ for config in PAR2:
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
                         load_to_compare *= MACHINE_RATIO
                     
-                    if (phases_load[station_id] + load_to_compare > (workload_norm)/N_PHASES):
+                    if DYNAMIC_CAPS_ENABLED:
+                        limit = system.Cap_mach[station_id]
+                    else:
+                        limit = workload_norm / N_PHASES
+
+                    if (phases_load[station_id] + load_to_compare > limit):
                         return False
                 
                 job.ReleaseDate = self.env.now
@@ -856,8 +929,10 @@ for config in PAR2:
                 
                 # Process jobs in PRD order
                 for job in jobs_to_evaluate:
-                    if not evaluateJob(self, job, phases_load):
+                    if not evaluateJob(self, job, phases_load, self.system):
                         self.PoolUpstream.append(job)
+                
+                self._urgent_job_valve()
                     
                 yield env.timeout(period)
 
@@ -914,19 +989,27 @@ for config in PAR2:
             Stage 1: Release collaborative jobs with human workload limits
             Stage 2: Release independent jobs with machine workload limits (human loads fixed)
             """
-            def evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
+            def evaluateJobStage1(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 1: Check human workload constraints for collaborative jobs"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 for station_id in job.Routing:
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > (workload_norm)/N_PHASES):
+                    if DYNAMIC_CAPS_ENABLED:
+                        limit = system.Cap_mach[station_id]
+                    else:
+                        limit = workload_norm / N_PHASES
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
                 
 
                 # Check human load constraints for human-machine stations ONLY
                 for station_id in job.Routing:
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
-                        if (human_phases_load[station_id] + job_human_load[station_id] > (workload_norm)/N_PHASES):
+                        if DYNAMIC_CAPS_ENABLED:
+                            limit = system.Cap_hum[station_id]
+                        else:
+                            limit = workload_norm / N_PHASES
+                        if (human_phases_load[station_id] + job_human_load[station_id] > limit):
                             return False
                 
                 # If human constraints satisfied, release the job and update both loads
@@ -945,13 +1028,17 @@ for config in PAR2:
                 
                 return True
                 
-            def evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
+            def evaluateJobStage2(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 2: Check machine workload constraints for independent jobs (human loads fixed)"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 # Check machine load constraints for all stations in routing
                 for station_id in job.Routing:
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > (workload_norm)/N_PHASES):
+                    if DYNAMIC_CAPS_ENABLED:
+                        limit = system.Cap_mach[station_id]
+                    else:
+                        limit = workload_norm / N_PHASES
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
                 
                 # If machine constraints satisfied, release the job
@@ -987,19 +1074,20 @@ for config in PAR2:
                 # STAGE 1: Process collaborative jobs with human workload constraints
                 remaining_collaborative = []
                 for job in collaborative_jobs:
-                    if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
+                    if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_collaborative.append(job)
                 
                 # STAGE 2: With human loads fixed, process independent jobs with machine constraints
                 remaining_independent = []
                 for job in independent_jobs:
-                    if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
+                    if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_independent.append(job)
                 
                 # Return unreleased jobs to pool (maintain PRD order)
                 for job in remaining_collaborative + remaining_independent:
                     self.PoolUpstream.append(job)
-                    
+
+                self._urgent_job_valve()   
                 yield env.timeout(period)
 
         def Human_Centric_release_directed(self, period, workload_norm):
@@ -1008,18 +1096,26 @@ for config in PAR2:
             Stage 1: Release collaborative jobs with human workload limits
             Stage 2: Release independent jobs with machine workload limits (human loads fixed)
             """
-            def evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
+            def evaluateJobStage1(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 1: Check human workload constraints for collaborative jobs"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 for station_id in job.Routing:
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > (workload_norm)/N_PHASES):
+                    if DYNAMIC_CAPS_ENABLED:
+                        limit = system.Cap_mach[station_id]
+                    else:
+                        limit = workload_norm / N_PHASES
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
                 
                 # Check human load constraints for human-machine stations ONLY
                 for station_id in job.Routing:
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
-                        if (human_phases_load[station_id] + job_human_load[station_id] > (workload_norm)/N_PHASES):
+                        if DYNAMIC_CAPS_ENABLED:
+                            limit = system.Cap_hum[station_id]
+                        else:
+                            limit = workload_norm / N_PHASES
+                        if (human_phases_load[station_id] + job_human_load[station_id] > limit):
                             return False
                 
                 # If human constraints satisfied, release the job and update both loads
@@ -1038,13 +1134,17 @@ for config in PAR2:
                 
                 return True
                 
-            def evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
+            def evaluateJobStage2(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 2: Check machine workload constraints for independent jobs (human loads fixed)"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 # Check machine load constraints for all stations in routing
                 for station_id in job.Routing:
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > (workload_norm)/N_PHASES):
+                    if DYNAMIC_CAPS_ENABLED:
+                        limit = system.Cap_mach[station_id]
+                    else:
+                        limit = workload_norm / N_PHASES
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
                 
                 # If machine constraints satisfied, release the job
@@ -1080,19 +1180,20 @@ for config in PAR2:
                 # STAGE 1: Process collaborative jobs with human workload constraints
                 remaining_collaborative = []
                 for job in collaborative_jobs:
-                    if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
+                    if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_collaborative.append(job)
                 
                 # STAGE 2: With human loads fixed, process independent jobs with machine constraints
                 remaining_independent = []
                 for job in independent_jobs:
-                    if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
+                    if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_independent.append(job)
                 
                 # Return unreleased jobs to pool (maintain PRD order)
                 for job in remaining_collaborative + remaining_independent:
                     self.PoolUpstream.append(job)
-                    
+                
+                self._urgent_job_valve()
                 yield env.timeout(period)
 
         def Human_Centric_release_dual(self, period):
@@ -1221,7 +1322,55 @@ for config in PAR2:
                     
                 yield env.timeout(period)
 
+        def WB_MOD_release(self, period):
+            """Periodically calls the WB_MOD optimizer and releases jobs based on its plan."""
+            print("WB_MOD release process started.")
+            while True:
+                # 1. Prepare inputs for the optimizer
+                psp_jobs = self.PoolUpstream.get_list()
 
+                if not psp_jobs:
+                    yield self.env.timeout(period)
+                    continue
+
+                config = {
+                    "review_horizon_T": REVIEW_HORIZON_T,
+                    "wb_mod_rho": WB_MOD_PARAMS["rho"],
+                    "wb_mod_kappa": WB_MOD_PARAMS["kappa"],
+                    "wb_mod_weights_decay": WB_MOD_PARAMS["weights_decay"],
+                    "n_phases": N_PHASES
+                }
+
+                # 2. Call the optimizer (SKIPPED FOR TESTING DUE TO PERFORMANCE ISSUES)
+                print(f"Time {self.env.now:.2f}: WB_MOD running with test logic.")
+                # Fallback test logic: release a random 20% of jobs and create a dummy plan
+                jobs_to_release_ids = [j.id for j in psp_jobs if random.random() < 0.2]
+                adj_plan_t0 = {(1, 0): 60} # Dummy plan: 60 mins from station 0 to 1
+                print(f"WB_MOD Test Logic: Releasing {len(jobs_to_release_ids)} jobs.")
+
+                # 3. Store the adjustment plan for workers
+                self.system.adj_plan = adj_plan_t0
+
+                # 4. Release the selected jobs
+                remaining_jobs_in_pool = list(self.PoolUpstream.get_list())
+                self.PoolUpstream.array.clear()
+
+                for job in remaining_jobs_in_pool:
+                    if job.id in jobs_to_release_ids:
+                        job.ReleaseDate = self.env.now
+                        self.Pools[job.get_current_machine()].append(job)
+                    else:
+                        self.PoolUpstream.append(job)
+
+                # Signal to workers that a new plan is available
+                if hasattr(self.system, 'new_adj_plan_event'):
+                    if not self.system.new_adj_plan_event.triggered:
+                        print(f"Time {self.env.now:.2f}: WB_MOD triggering new_adj_plan_event.")
+                        self.system.new_adj_plan_event.succeed()
+                    self.system.new_adj_plan_event = self.env.event()
+
+                # 5. Wait for the next review period
+                yield self.env.timeout(period)
 
     class Pool(object):
         """Represents a buffer or queue for jobs in the simulation."""
@@ -1283,6 +1432,8 @@ for config in PAR2:
             self.current_job = None
             self.efficiency = 0
             self.Workers = list()
+            self.empty_station_minutes = 0
+            self.overmanned_minutes = 0
             # References to other system components.
             self.PoolUpstream = PoolUpstream
             self.PSP = PSP
@@ -1471,6 +1622,7 @@ for config in PAR2:
                             # Process the job
                             start_time = self.env.now
                             
+                            if processing_time < 0: processing_time = 0
                             yield self.env.timeout(processing_time)
                             
                            # if job_tracker is not None:
@@ -1578,7 +1730,7 @@ for config in PAR2:
             relocation (list): A counter for the number of times the worker has moved to each machine.
         """
 
-        def __init__(self, env, id, Pools, Machines, Default_machine, skills = None):
+        def __init__(self, env, id, Pools, Machines, Default_machine, system, skills = None):
             """
             Initializes a worker.
 
@@ -1594,12 +1746,14 @@ for config in PAR2:
             self.env = env
             self.id = id
             self.Default_machine = Default_machine # The worker's home station ID.
+            self.system = system
 
             # Initialize attributes for tracking state and performance.
             self.skillperphase = list() # Stores worker's efficiency at each machine.
             self.current_machine_id = -1 # Current machine location, -1 means not yet assigned.
             self.relocation = list(0 for i in range(N_PHASES)) # Tracks number of moves to each machine.
             self.WorkingTime = list(0 for i in range(N_PHASES)) # Tracks time spent at each machine.
+            self.time_in_transfer = 0 # Tracks time spent moving between stations.
 
             # This attribute is used for advanced flexible strategies to adjust capacity.
             self.Capacity_adjustment = list(0 for i in range(N_PHASES))
@@ -1625,6 +1779,7 @@ for config in PAR2:
             elif WORKER_MODE == 'reactive': self.process = self.env.process(self._ReactiveWorker(Machines,None))
             # Worker moves based on an output control mechanism.
             elif WORKER_MODE == 'flexible': self.process = self.env.process(self._Flexible_loop(Machines,None))
+            elif WORKER_MODE == 'plan_following': self.process = self.env.process(self._PlanFollowingWorker(Machines, system))
             else: exit("Worker mode not recognised")
 
         def _SetMonoSkill(self):
@@ -1728,6 +1883,30 @@ for config in PAR2:
             if Machines[self.current_machine_id].waiting_new_workers.triggered == False:
                 Machines[self.current_machine_id].waiting_new_workers.succeed()
 
+        def _get_next_machine_reactive(self, Machines):
+            """Determines the best machine for a reactive worker to move to."""
+            # Priority 1: Stay at the home machine if there is work to do.
+            if len(Machines[self.Default_machine].PoolUpstream) > 0:
+                 return self.Default_machine
+
+            # Priority 2: Find a different machine with work.
+            possible_external_machines = []
+            for i in range(N_PHASES):
+                if i == self.Default_machine:
+                    continue # Skip home machine
+
+                # Check if the worker is skilled and if there's a queue of jobs.
+                if self.skillperphase[i] > 0 and len(Machines[i].PoolUpstream) > 0:
+                    possible_external_machines.append((i, self.skillperphase[i]))
+
+            if possible_external_machines:
+                # Sort potential machines by skill level (descending) and choose the best.
+                possible_external_machines.sort(key=lambda x: float(x[1]), reverse=True)
+                return possible_external_machines[0][0]
+
+            # Priority 3: If no other machine has work, return to the default machine.
+            return self.Default_machine
+
         def _ReactiveWorker(self, Machines, Pools):
             """
             A SimPy process for a worker who reactively moves between stations.
@@ -1736,33 +1915,9 @@ for config in PAR2:
             for other stations with work where they have skills. They prioritize
             stations where they have higher skills.
             """
-            def _get_next_machine_reactive(self):
-                """Determines the best machine for a reactive worker to move to."""
-                # Priority 1: Stay at the home machine if there is work to do.
-                if len(Machines[self.Default_machine].PoolUpstream) > 0:
-                     return self.Default_machine
-
-                # Priority 2: Find a different machine with work.
-                possible_external_machines = []
-                for i in range(N_PHASES):
-                    if i == self.Default_machine:
-                        continue # Skip home machine
-
-                    # Check if the worker is skilled and if there's a queue of jobs.
-                    if self.skillperphase[i] > 0 and len(Machines[i].PoolUpstream) > 0:
-                        possible_external_machines.append((i, self.skillperphase[i]))
-
-                if possible_external_machines:
-                    # Sort potential machines by skill level (descending) and choose the best.
-                    possible_external_machines.sort(key=lambda x: float(x[1]), reverse=True)
-                    return possible_external_machines[0][0]
-
-                # Priority 3: If no other machine has work, return to the default machine.
-                return self.Default_machine
-
             while True:
                 # Determine the next target machine based on reactive logic.
-                next_machine = _get_next_machine_reactive(self)
+                next_machine = self._get_next_machine_reactive(Machines)
 
                 # --- Handle Relocation ---
                 if self.current_machine_id != -1 and self.current_machine_id != next_machine:
@@ -1894,56 +2049,111 @@ for config in PAR2:
                     # update capacity adjustment
                     self.Capacity_adjustment[self.current_machine_id] = self.Capacity_adjustment[self.current_machine_id] - (self.env.now-start)
 
+        def _PlanFollowingWorker(self, Machines, system):
+            """
+            A SimPy process for a worker that follows a centrally computed plan.
+            Falls back to reactive behavior if no plan is available.
+            """
+            while True:
+                print(f"Time {self.env.now:.2f}: Worker {self.id} starting loop.")
+                # Default behavior is reactive
+                next_machine = self._get_next_machine_reactive(Machines)
+
+                # Check for a plan to follow
+                # The plan is in system.adj_plan, format: {(to_station, from_station): minutes}
+                r = self.Default_machine
+                if system.adj_plan:
+                    for (i, from_r), minutes in system.adj_plan.items():
+                        if from_r == r and minutes > 0:
+                            if self.skillperphase[i] > 0:
+                                next_machine = i
+                                # To prevent all workers from moving, we 'consume' the plan.
+                                # This is a simplification; a real system might need specific worker assignments.
+                                system.adj_plan[(i, from_r)] = 0
+                                break
+
+                # --- Handle Relocation (similar to _ReactiveWorker) ---
+                if self.current_machine_id != -1 and self.current_machine_id != next_machine:
+                    for i in range(len(Machines[self.current_machine_id].Workers)):
+                        if Machines[self.current_machine_id].Workers[i].id == self.id:
+                            del Machines[self.current_machine_id].Workers[i]
+                            Machines[self.current_machine_id].process.interrupt()
+                            break
+
+                if self.current_machine_id != next_machine:
+                    yield self.env.timeout(TRANSFER_TIME)
+                    self.time_in_transfer += TRANSFER_TIME # Log telemetry
+                    self.current_machine_id = next_machine
+                    self.relocation[next_machine] += 1
+
+                    Machines[self.current_machine_id].Workers.append(self)
+                    Machines[self.current_machine_id].process.interrupt()
+                    if not Machines[self.current_machine_id].waiting_new_workers.triggered:
+                        Machines[self.current_machine_id].waiting_new_workers.succeed()
+
+                # --- Wait for a trigger to re-evaluate position ---
+                waiting_events = [system.new_adj_plan_event]
+
+                # Also wait for the current job to finish
+                end_current_job = self.env.event()
+                if self.current_machine_id != -1:
+                    Machines[self.current_machine_id].waiting_end_job.append(end_current_job)
+                    waiting_events.append(end_current_job)
+
+                # Also wait for a new job to arrive at the home station
+                waiting_new_jobs = self.env.event()
+                Machines[self.Default_machine].PoolUpstream.waiting_new_jobs.append(waiting_new_jobs)
+                waiting_events.append(waiting_new_jobs)
+
+                print(f"Time {self.env.now:.2f}: Worker {self.id} waiting for events.")
+                yield self.env.timeout(PERMANENCE_TIME)
+                yield AnyOf(self.env, waiting_events)
+                print(f"Time {self.env.now:.2f}: Worker {self.id} woke up.")    
+    
     class DynamicConstraintManager:
-        def __init__(self, env, scenario_config):
+        def __init__(self, env, scenario_config, system):
             self.env = env
             self.config = scenario_config
+            self.system = system
             self.switch_count = 0
-            self.current_human_norm = scenario_config.get("base_human", scenario_config.get("human_norm", 1000))
-            self.current_machine_norm = scenario_config.get("base_machine", scenario_config.get("machine_norm", 1000))
+            # self.current_human_norm = scenario_config.get("base_human", scenario_config.get("human_norm", 1000))
+            # self.current_machine_norm = scenario_config.get("base_machine", scenario_config.get("machine_norm", 1000))
             
-            global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
-            CURRENT_HUMAN_NORM = self.current_human_norm
-            CURRENT_MACHINE_NORM = self.current_machine_norm
-            
-            if scenario_config["type"] == "dynamic":
-                env.process(self.constraint_switching_process())
+            # global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
+            # CURRENT_HUMAN_NORM = self.current_human_norm
+            # CURRENT_MACHINE_NORM = self.current_machine_norm
+            # The old global norms are now superseded by the station-specific capacities
+            # but we can keep them for legacy rules if needed.
+
+            if scenario_config["type"] == "dynamic" and DYNAMIC_CAPS_ENABLED:
+                env.process(self.availability_switching_process())
         
-        def constraint_switching_process(self):
-            """Switch constraints dynamically to model absenteeism patterns"""
+        def availability_switching_process(self):
+            """Switch availability factors dynamically."""
             switch_freq = self.config["switch_frequency"]
-            base_human = self.config["base_human"] 
-            base_machine = self.config["base_machine"]
+            # base_human = self.config["base_human"] 
+            # base_machine = self.config["base_machine"]
             
             while True:
                 yield self.env.timeout(switch_freq)
                 self.switch_count += 1
                 
-                # Randomly determine constraint type
-                scenario = random.choice(["human_shortage", "machine_shortage", "balanced"])
+                # Example of dynamic availability: simulate a machine breakdown or absenteeism
+                # This can be made more sophisticated later.
+                for i in range(N_PHASES):
+                    # Randomly dip availability
+                    self.system.A_mach[i] = random.choice([1.0, 1.0, 1.0, 0.8]) # 25% chance of 20% downtime
+                    self.system.A_hum[i] = random.choice([1.0, 1.0, 0.9, 0.85]) # Chance of absenteeism
                 
-                if scenario == "human_shortage":
-                    self.current_human_norm = base_human * 0.7
-                    self.current_machine_norm = base_machine * 1.1
-                    if SCREEN_DEBUG:
-                        print(f"Time {self.env.now/480:.1f}: Human shortage - H:{self.current_human_norm:.0f}, M:{self.current_machine_norm:.0f}")
-                        
-                elif scenario == "machine_shortage": 
-                    self.current_human_norm = base_human * 1.1
-                    self.current_machine_norm = base_machine * 0.8
-                    if SCREEN_DEBUG:
-                        print(f"Time {self.env.now/480:.1f}: Machine shortage - H:{self.current_human_norm:.0f}, M:{self.current_machine_norm:.0f}")
-                        
-                else:  # balanced
-                    self.current_human_norm = base_human
-                    self.current_machine_norm = base_machine
-                    if SCREEN_DEBUG:
-                        print(f"Time {self.env.now/480:.1f}: Balanced - H:{self.current_human_norm:.0f}, M:{self.current_machine_norm:.0f}")
+                # Update the effective capacities in the system
+                self.system.update_effective_capacities()
                 
-                # Update global variables
-                global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
-                CURRENT_HUMAN_NORM = self.current_human_norm
-                CURRENT_MACHINE_NORM = self.current_machine_norm
+                if SCREEN_DEBUG:
+                    print(f"Time {self.env.now/480:.1f}: Availability updated.")
+                    print(f"  A_mach: {[round(x, 2) for x in self.system.A_mach]}")
+                    print(f"  Cap_mach: {[round(x, 1) for x in self.system.Cap_mach]}")
+                    print(f"  A_hum: {[round(x, 2) for x in self.system.A_hum]}")
+                    print(f"  Cap_hum: {[round(x, 1) for x in self.system.Cap_hum]}")
     
     class System(object):
         """
@@ -1962,11 +2172,23 @@ for config in PAR2:
             # Create the machines.
             self.Machines = [Machine(self.env, i, self.Pools[i], self.Jobs_delivered, self.Pools, self.PSP) for i in range(N_PHASES)]
             # Create the workers.
-            self.Workers = [Worker(env, i, self.Pools, self.Machines, i) for i in range(N_WORKERS)]
+            self.Workers = [Worker(env, i, self.Pools, self.Machines, i, self) for i in range(N_WORKERS)]
             # Start the job generator.
             self.generator = Jobs_generator(env, self.PSP)
             # Start the order release mechanism.
             self.OR = Orders_release(env, RELEASE_RULE, self, WORKLOAD_NORMS[WLIndex])
+
+            # Initialize base and effective capacities
+            self.BaseCap_mach = [0] * N_PHASES
+            self.BaseCap_hum = [0] * N_PHASES
+            self.A_mach = [1.0] * N_PHASES # Availability factors, default to 1.0
+            self.A_hum = [1.0] * N_PHASES
+            self.Cap_mach = [0] * N_PHASES
+            self.Cap_hum = [0] * N_PHASES
+            self.setup_capacities()
+            
+            self.adj_plan = {}
+            self.new_adj_plan_event = env.event()
 
             ### USE IF DYNAMIC SYSTEM ###
             
@@ -1978,8 +2200,39 @@ for config in PAR2:
                 CURRENT_HUMAN_NORM = scenario_config["human_norm"]
                 CURRENT_MACHINE_NORM = scenario_config["machine_norm"]
             
-            self.constraint_manager = DynamicConstraintManager(env, scenario_config)
+            self.constraint_manager = DynamicConstraintManager(env, scenario_config, self)
+            self.env.process(self.monitor_stations(480)) # Monitor once per day
             
+        
+        def monitor_stations(self, period):
+            while True:
+                yield self.env.timeout(period)
+                for machine in self.Machines:
+                    if len(machine.Workers) == 0:
+                        machine.empty_station_minutes += period
+                    if len(machine.Workers) > 1: # Assuming 1 worker is "manned"
+                        machine.overmanned_minutes += period
+
+        def setup_capacities(self):
+            """Calculates and sets the base and effective capacities."""
+            workload_norm = WORKLOAD_NORMS[WLIndex]
+            for i in range(N_PHASES):
+                if HUMAN_MACHINE_PHASES.get(i, False):
+                    # H-M station
+                    self.BaseCap_mach[i] = (workload_norm / N_PHASES) * MACHINE_RATIO
+                    self.BaseCap_hum[i] = (workload_norm / N_PHASES) * HUMAN_RATIO
+                else:
+                    # Pure machine station
+                    self.BaseCap_mach[i] = (workload_norm / N_PHASES) * 1.0
+                    self.BaseCap_hum[i] = 0
+
+            self.update_effective_capacities()
+
+        def update_effective_capacities(self):
+            """Updates effective capacities based on current availability factors."""
+            for i in range(N_PHASES):
+                self.Cap_mach[i] = self.BaseCap_mach[i] * self.A_mach[i]
+                self.Cap_hum[i] = self.BaseCap_hum[i] * self.A_hum[i]
 
     # --- Standalone Workload Calculation Functions ---
     def get_direct_workload(pools):
@@ -2323,6 +2576,7 @@ for config in PAR2:
                         if m_would_exceed or h_would_exceed:
                             print(f"  Station {station_id}: M_exceed={m_would_exceed}, H_exceed={h_would_exceed}")
             
+
             if (env.now > WARMUP):
                 net_time=env.now-WARMUP
                 #   machines info
@@ -2448,7 +2702,7 @@ for config in PAR2:
                             WORKER_FLEXIBILITY + "_" + str(WORKLOAD_NORMS[WLIndex]) + 
                             "_" + str(run) + '.csv', access_type) as csvfile:
                         fieldnames = ['Workload','nrun','id', 'Arrival Date', 'Due Date', 
-                                    'Completation Date', 'GTT','SFT','Tardiness','Lateness']
+                                    'Completation Date', 'GTT','SFT','Tardiness','Lateness', 'ForceReleased']
                         for i in range(N_PHASES):
                             fieldnames.append("PT("+str(i)+")")
                         for i in range(N_PHASES):
@@ -2476,7 +2730,8 @@ for config in PAR2:
                                 'GTT': job.get_GTT(),
                                 'SFT': job.get_SFT(),
                                 'Tardiness': job.get_tardiness(),
-                                'Lateness': job.get_lateness()
+                                'Lateness': job.get_lateness(),
+                                'ForceReleased': job.force_released
                             }
                             for i in range(N_PHASES):
                                 row["PT("+str(i)+")"] = job.ProcessingTime[i]
@@ -2509,13 +2764,18 @@ for config in PAR2:
                         'Shopflow',
                         'Shoplength',
                         'nrun', 
-                        #'Job Entry',
+                        # 'Job Entry',
                         'Exit Rate',
                         'Total Processed Workload',
-                        #Jobs intormation
+                        'Forced_releases_count',
+                        # 'Jobs intormation',
                         'Av. GTT','Av. SFT','Av. Tardiness','Av. Lateness','Tardy','STD Lateness',
                         'Constraint Scenario', 'Current Human Norm', 'Current Machine Norm', 'Constraint Switches'
                         ]
+                        # Capacity information
+                        for i in range(N_PHASES):
+                            fieldnames.append("Cap_mach_"+str(i))
+                            fieldnames.append("Cap_hum_"+str(i))
                         # Queues information
                         fieldnames.append("PSP Shop Load")
                         for i in range(N_PHASES):
@@ -2532,6 +2792,10 @@ for config in PAR2:
                         # worker relocations
                         for i in range(N_WORKERS):
                             fieldnames.append("W" + str(i) + " Relocations")
+                        for i in range(N_WORKERS):
+                            fieldnames.append("W" + str(i) + " TimeInTransfer")
+                        for i in range(N_WORKERS):
+                            fieldnames.append("W" + str(i) + " PctTimeOffHome")
                         # workers relocation to a specific machine
                         for i in range(N_WORKERS):
                             for j in range(N_PHASES):
@@ -2539,6 +2803,9 @@ for config in PAR2:
                         # Machines
                         for i in range(N_PHASES):
                             fieldnames.append("Machine "+str(i)+" eff.(%)")
+                        for i in range(N_PHASES):
+                            fieldnames.append("M"+str(i)+" OvermannedMins")
+                            fieldnames.append("M"+str(i)+" EmptyMins")
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, lineterminator="\r")
                         if  access_type=='w':
                             writer.writeheader()
@@ -2555,6 +2822,7 @@ for config in PAR2:
                             #'Job Entry':((generator.generated_orders-len(Rejected_orders))/float(generator.generated_orders)),
                             'Exit Rate':(FinishedUnits/float(net_time)),
                             'Total Processed Workload':(sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)),                    
+                            'Forced_releases_count':system.OR.Forced_releases_count,
                             'Av. GTT': (sum(job.get_GTT() for job in jobs)/FinishedUnits),
                             'Av. SFT': (sum(job.get_SFT() for job in jobs)/FinishedUnits),                
                             'Av. Tardiness':(sum(job.get_tardiness() for job in jobs)/FinishedUnits),
@@ -2577,19 +2845,32 @@ for config in PAR2:
                         for i in range(N_WORKERS):
                             for j in range(N_PHASES):   
                                 row["W"+str(i)+"-M"+str(j)]=(system.Workers[i].WorkingTime[j])/(net_time)
-                        # worker idleness
+                        # Capacity information
+                        for i in range(N_PHASES):
+                            row["Cap_mach_"+str(i)] = system.Cap_mach[i]
+                            row["Cap_hum_"+str(i)] = system.Cap_hum[i]
+                        # Worker idleness
                         for i in range(N_WORKERS):
                             row["W"+str(i)+" Idleness"]=(net_time-sum(system.Workers[i].WorkingTime))/(net_time)
-                        # worker total relocations
+                        # Worker total relocations
                         for i in range(N_WORKERS):
-                            row["W" + str(i) + " Relocations"] = system.Workers[i].relocation[i]
-                        # subdivision of workers relocations
+                            row["W" + str(i) + " Relocations"] = sum(system.Workers[i].relocation)
+                            row["W" + str(i) + " TimeInTransfer"] = system.Workers[i].time_in_transfer
+                            total_working_time = sum(system.Workers[i].WorkingTime)
+                            if total_working_time > 0:
+                                time_off_home = total_working_time - system.Workers[i].WorkingTime[system.Workers[i].Default_machine]
+                                row["W" + str(i) + " PctTimeOffHome"] = (time_off_home / total_working_time) * 100
+                            else:
+                                row["W" + str(i) + " PctTimeOffHome"] = 0
+                        # Subdivision of workers relocations
                         for i in range(N_WORKERS):
                             for j in range(N_PHASES):
                                 row["Rel-W" + str(i) + "-M" + str(j)] = system.Workers[i].relocation[j]
                         # Machines
                         for machine in system.Machines:
                             row["Machine "+str(machine.id)+" eff.(%)"]=(machine.WorkloadProcessed/(net_time))
+                            row["M"+str(machine.id)+" OvermannedMins"] = machine.overmanned_minutes
+                            row["M"+str(machine.id)+" EmptyMins"] = machine.empty_station_minutes
                         writer.writerow(row)
         # <if run debug>
         if RUN_DEBUG:
