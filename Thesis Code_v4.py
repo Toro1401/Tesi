@@ -9,7 +9,7 @@ import time
 import numpy as np
 from itertools import permutations
 import pandas as pd
-from optimizer import run_wb_mod_optimizer
+from optimizer_v4 import run_wb_mod_optimizer
 
 # =============================================================================
 # # ORR PARAMETERS
@@ -22,7 +22,7 @@ from optimizer import run_wb_mod_optimizer
 # "WB_MOD": Workload Balancing (optimization-driven)
 RELEASE_RULE="WB_MOD"
 # If True, a starving machine can pull a job from the pre-shop pool, bypassing the release rule.
-STARVATION_AVOIDANCE = False 
+STARVATION_AVOIDANCE = False
 
 # =============================================================================
 # # WORKERS PARAMETERS
@@ -111,13 +111,18 @@ DYNAMIC_CAPS_ENABLED = False
 # Enable/disable the urgent job release valve
 URGENT_VALVE_ENABLED = False
 
+# --- WB_MOD Feature Flags ---
+WB_MOD_USE_OPTIMIZER = True
+WB_MOD_MAX_PSP = 20          # Max jobs to consider in optimizer for speed
+WB_MOD_SOLVER_TIMEOUT = 10   # Seconds
+
 ### USE IF DYNAMIC SYSTEM ###
 
 
 # DUAL WORKLOAD NORM PARAMETERS
 CONSTRAINT_SCENARIOS = {
     "baseline": {"type": "static", "human_norm": 1000, "machine_norm": 1000},
-    "human_constrained": {"type": "static", "human_norm": 800, "machine_norm": 1200}, 
+    "human_constrained": {"type": "static", "human_norm": 800, "machine_norm": 1200},
     "machine_constrained": {"type": "static", "human_norm": 1200, "machine_norm": 800},
     "dynamic_switching": {"type": "dynamic", "base_human": 1000, "base_machine": 1000, "switch_frequency": 960}  # Every 2 days
 }
@@ -132,7 +137,7 @@ PAR1 = [
     ["WB_MOD", "plan_following", False, "human_constrained", "high"],
     ["WB_MOD", "plan_following", False, "dynamic_switching", "high"],
     # ["WL_DIRECT", "static", False, "baseline", "none"],
-    # ["WL_DIRECT", "static", False, "human_constrained", "none"], 
+    # ["WL_DIRECT", "static", False, "human_constrained", "none"],
     # ["WL_DIRECT", "static", False, "dynamic_switching", "none"],
 ]
 
@@ -147,7 +152,7 @@ CONSTRAINT_SCENARIO = "dynamic_switching"
 # This section defines the different simulation scenarios to be run.
 # PAR1 defines the core settings for each simulation run.
 PAR1=[
-    # algorith, workforce, starv av. 
+    # algorith, workforce, starv av.
     ["IM","static", False],
     ["HUMAN_CENTRIC","static", False],
     ["WL_DIRECT", "static", False],
@@ -160,6 +165,7 @@ for config in PAR1:
     PAR2.append(temp)
 
 for config in PAR2:
+    # Single, consistent mapping from config to named fields
     RELEASE_RULE = config[0]
     STARVATION_AVOIDANCE = config[2] 
     WORKER_MODE = config[1]
@@ -168,13 +174,23 @@ for config in PAR2:
 
     ### USE IF DYNAMIC SYSTEM ###
 
-    
     CONSTRAINT_SCENARIO = config[3] 
     ABSENTEEISM_LEVEL = ABSENTEEISM_LEVELS[config[4]]  
     SHOP_FLOW=config[5]
     SHOP_LENGTH=config[6]
 
-
+    # Log the parsed scenario for verification
+    print("\n" + "="*80)
+    print(f"PARSING SCENARIO CONFIG: \n"
+          f"  Release Rule: {RELEASE_RULE}\n"
+          f"  Worker Mode: {WORKER_MODE}\n"
+          f"  Starvation Avoidance: {STARVATION_AVOIDANCE}\n"
+          f"  Constraint Scenario: {CONSTRAINT_SCENARIO}\n"
+          f"  Absenteeism Level: {ABSENTEEISM_LEVEL}\n"
+          f"  Shop Flow: {SHOP_FLOW}\n"
+          f"  Shop Length: {SHOP_LENGTH}")
+    print("="*80)
+    
     # Set initial constraint values
     scenario_config = CONSTRAINT_SCENARIOS[CONSTRAINT_SCENARIO]
     if scenario_config["type"] == "static":
@@ -183,11 +199,10 @@ for config in PAR2:
     else:
         CURRENT_HUMAN_NORM = scenario_config["base_human"]
         CURRENT_MACHINE_NORM = scenario_config["base_machine"]
-    
+
     WORKLOAD_NORMS = [1000]  # Single value for dual constraint system
     WLIndex = 0
-    
-    """
+
     if   RELEASE_RULE=="PR" or RELEASE_RULE=="IM":
         WORKLOAD_NORMS=[0]
     else:
@@ -201,14 +216,14 @@ for config in PAR2:
             WORKLOAD_NORMS = [5400, 6600, 7800, 9600, 28800]
         elif SHOP_FLOW=="undirected" and SHOP_LENGTH=="variable":
             WORKLOAD_NORMS = [2700, 3600, 4800, 7200, 28800]
-    """
+
     N_WORKERS = 5
 
     N_PHASES = 5                # Machines/Workers
 
     HUMAN_MACHINE_PHASES = {
         0: False,  # Machine 1 - Pure machine station
-        1: False,  # Machine 2 - Pure machine station  
+        1: False,  # Machine 2 - Pure machine station
         2: True,   # Machine 3 - Human-machine collaborative station
         3: True,   # Machine 4 - Human-machine collaborative station
         4: True    # Machine 5 - Human-machine collaborative station
@@ -226,7 +241,7 @@ for config in PAR2:
     LAST_RUN = 1
     WARMUP = 200000
 
-    # average number of stations per configuration 
+    # average number of stations per configuration
     # "undirected-variable" -> 4.015384615384615
     # "directed-variable" ->   2.5806451612903225
 
@@ -236,7 +251,7 @@ for config in PAR2:
     CSV_OUTPUT_JOBS = True
     CSV_OUTPUT_SYSTEM = True
 
-    RUN_DEBUG = True                       # used to compute the warmup period 
+    RUN_DEBUG = True                       # used to compute the warmup period
 
     # <if run debug>
     if RUN_DEBUG:
@@ -368,21 +383,21 @@ for config in PAR2:
             global DUE_DATE_MIN
             global DUE_DATE_MAX
 
-            self.id = id    
-            self.ArrivalDate = env.now 
-            self.ReleaseDate = None            
+            self.id = id
+            self.ArrivalDate = env.now
+            self.ReleaseDate = None
             self.CompletationDate = None
             self.ArrivalDateMachines = list(0 for i in range(N_PHASES))
             self.CompletationDateMachines = list(0 for i in range(N_PHASES))
             self.ArrivalDateQueue = list(0 for i in range(N_PHASES))
-            
+
             n_machines=N_PHASES
-            
+
             if SHOP_LENGTH=="variable":
                 n_machines=np.random.randint(low=1, high=N_PHASES)
-            
+
             self.Routing = list()
-            while len(self.Routing)<n_machines: 
+            while len(self.Routing)<n_machines:
                 x = np.random.randint(low=0, high=N_PHASES)
                 if x not in self.Routing:
                     self.Routing.append(x)
@@ -394,7 +409,7 @@ for config in PAR2:
             self.DueDate = self.ArrivalDate + np.random.uniform(DUE_DATE_MIN,DUE_DATE_MAX)
 
             #Processing Time
-            self.ProcessingTime = list(0 for i in range(N_PHASES))   
+            self.ProcessingTime = list(0 for i in range(N_PHASES))
             for i in self.Routing:
                 x = np.random.lognormal(JOBS_MU, JOBS_SIGMA)
                 while x>360:
@@ -416,7 +431,7 @@ for config in PAR2:
             if self.Position >= len(self.Routing):
                 self.Position = len(self.Routing) - 1
             return(self.Routing[self.Position])
-        
+
         def get_CAW(self):
             """Calculates the Contribution to the Corrected Aggregated Workload (CAW)."""
             load = [0] * N_PHASES
@@ -441,12 +456,12 @@ for config in PAR2:
             """
             if RELEASE_RULE != "HUMAN_CENTRIC":
                 return False
-                
+
             for machine_id in self.Routing:
                 if HUMAN_MACHINE_PHASES.get(machine_id, False):
                     return True
-            return False        
-        
+            return False
+
         def get_CSL_with_ratios(self):
             """
             Contribution to corrected shop load with machine/human ratios applied
@@ -454,10 +469,10 @@ for config in PAR2:
             """
             machine_load = list(0 for i in range(N_PHASES))
             human_load = list(0 for i in range(N_PHASES))
-            
+
             for i in range(N_PHASES):
                 base_load = self.ProcessingTime[i] / len(self.Routing)
-                
+
                 if HUMAN_MACHINE_PHASES.get(i, False):
                     # Human-machine station
                     machine_load[i] = base_load * MACHINE_RATIO
@@ -466,9 +481,9 @@ for config in PAR2:
                     # Pure machine station
                     machine_load[i] = base_load
                     human_load[i] = 0
-                    
+
             return machine_load, human_load
-            
+
         def get_CAW_routing_only(self):
             """
             LUMS-COR compliant: Contribution to corrected aggregated workload
@@ -481,21 +496,21 @@ for config in PAR2:
                 # Position correction: divide by (position in remaining routing + 1)
                 position_correction = pos_in_routing - self.Position + 1
                 load[station_id] = self.RemainingTime[station_id] / position_correction
-            
+
             return load
-                
+
         def get_CSL_routing_only(self):
             """
             LUMS-COR compliant: Contribution to corrected shop load
             Only considers stations in the job's actual routing
             """
             load = list(0 for i in range(N_PHASES))
-            
+
             for station_id in self.Routing:
                 load[station_id] = self.ProcessingTime[station_id] / len(self.Routing)
-            
+
             return load
-            
+
         def get_CSL_with_ratios_routing_only(self):
             """
             LUMS-COR compliant: Corrected shop load with machine/human ratios
@@ -504,10 +519,10 @@ for config in PAR2:
             """
             machine_load = list(0 for i in range(N_PHASES))
             human_load = list(0 for i in range(N_PHASES))
-            
+
             for station_id in self.Routing:
                 base_load = self.ProcessingTime[station_id] / len(self.Routing)
-                
+
                 if HUMAN_MACHINE_PHASES.get(station_id, False):
                     # Human-machine station
                     machine_load[station_id] = base_load * MACHINE_RATIO
@@ -516,7 +531,7 @@ for config in PAR2:
                     # Pure machine station
                     machine_load[station_id] = base_load
                     human_load[station_id] = 0
-                    
+
             return machine_load, human_load
 
         def get_dual_CSL_routing_only(self):
@@ -526,10 +541,10 @@ for config in PAR2:
             """
             machine_load = list(0 for i in range(N_PHASES))
             human_load = list(0 for i in range(N_PHASES))
-            
+
             for station_id in self.Routing:
                 base_load = self.ProcessingTime[station_id] / len(self.Routing)
-                
+
                 if HUMAN_MACHINE_PHASES.get(station_id, False):
                     # Human-machine station - split the load
                     machine_load[station_id] = base_load * MACHINE_RATIO
@@ -538,7 +553,7 @@ for config in PAR2:
                     # Pure machine station - all load goes to machines
                     machine_load[station_id] = base_load
                     human_load[station_id] = 0
-                    
+
             return machine_load, human_load
             # Consultive statistics
 
@@ -552,7 +567,7 @@ for config in PAR2:
         def get_SFT(self):
             """total_manufacturing_lead_time"""
             if self.__SFT__ == None:
-                self.__SFT__= self.CompletationDate - self.ReleaseDate  
+                self.__SFT__= self.CompletationDate - self.ReleaseDate
             return self.__SFT__
 
         def get_SFT_Machines(self):
@@ -571,11 +586,11 @@ for config in PAR2:
 
         def get_tardy(self):
             if self.__tardy__ == None:
-                if self.DueDate < self.CompletationDate: 
+                if self.DueDate < self.CompletationDate:
                     self.__tardy__=  1
 
                 else:
-                    self.__tardy__=  0  
+                    self.__tardy__=  0
             return self.__tardy__
 
         def get_tardiness(self):
@@ -585,7 +600,7 @@ for config in PAR2:
 
         def get_lateness(self):
             if self.__lateness__ == None:
-                self.__lateness__= self.CompletationDate-self.DueDate 
+                self.__lateness__= self.CompletationDate-self.DueDate
             return self.__lateness__
 
 
@@ -619,15 +634,15 @@ for config in PAR2:
             self.env.process(self._continuous_generator())
 
         """
-        def _periodic_generator(self, period):       
+        def _periodic_generator(self, period):
             while True:
                 for i in range(0, np.random.poisson(self.input_rate * period)):
-                    self.PoolDownstream.append(Job(self.env, self.generated_orders))                
-                # <if run debug>    
+                    self.PoolDownstream.append(Job(self.env, self.generated_orders))
+                # <if run debug>
                 global JOBS_ENTRY_DEBUG
                 JOBS_ENTRY_DEBUG.append(job)
-                # </>         
-                self.generated_orders += 1       
+                # </>
+                self.generated_orders += 1
                 yield env.timeout(period)
         """
 
@@ -667,27 +682,27 @@ for config in PAR2:
         """
         machine_shop_load = list(0 for i in range(N_PHASES))
         human_shop_load = list(0 for i in range(N_PHASES))
-        
+
         for pool in pools:
             for job in pool:
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
-                
+
                 for i in range(N_PHASES):
                     machine_shop_load[i] += job_machine_load[i]
                     human_shop_load[i] += job_human_load[i]
-                    
+
         return machine_shop_load, human_shop_load
-    
+
     def get_corrected_aggregated_workload_routing_only(pools):
         """
         LUMS-COR compliant: Get corrected aggregated workload considering only job routing
         """
         aggregated_WL = list(0 for i in range(N_PHASES))
-        
+
         for pool in pools:
             for job in pool:
                 job_contribution = job.get_CAW_routing_only()
-                
+
                 for i in range(N_PHASES):
                     aggregated_WL[i] += job_contribution[i]
 
@@ -698,11 +713,11 @@ for config in PAR2:
         LUMS-COR compliant: Get corrected shop load considering only job routing
         """
         shop_load = list(0 for i in range(N_PHASES))
-        
+
         for pool in pools:
             for job in pool:
                 job_contribution = job.get_CSL_routing_only()
-                
+
                 for i in range(N_PHASES):
                     shop_load[i] += job_contribution[i]
 
@@ -835,7 +850,7 @@ for config in PAR2:
             """
             def evaluateJob(self, job, phases_load, system):
                 job_CAW = job.get_CAW_routing_only()
-                
+
                 # Check only stations in the job's routing
                 for station_id in job.Routing:
                     # Apply machine ratio for human-machine stations
@@ -848,37 +863,37 @@ for config in PAR2:
                         limit = workload_norm / N_PHASES
                     if (phases_load[station_id] + load_to_compare > limit):
                         return False
-                
+
                 job.ReleaseDate = self.env.now
-                
+
                 # Only update workload for stations in the job's routing
                 for station_id in job.Routing:
                     phases_load[station_id] += job_CAW[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-        
+
             while True:
                 phases_load = get_corrected_aggregated_workload_routing_only(self.Pools)
-                
+
                 # Sort PSP by Due Date
                 jobs_to_evaluate = []
                 for i in range(len(self.PoolUpstream)):
                     jobs_to_evaluate.append(self.PoolUpstream.get(0))
-                
+
                 jobs_to_evaluate.sort(key=lambda x: x.DueDate)
-                
+
                 # Process jobs in PRD order
                 for job in jobs_to_evaluate:
                     if not evaluateJob(self, job, phases_load,self.system):
                         self.PoolUpstream.append(job)
 
-                self._urgent_job_valve()    
+                self._urgent_job_valve()
                 yield env.timeout(period)
 
         def WL_Direct_release_directed(self, period, workload_norm):
@@ -887,14 +902,14 @@ for config in PAR2:
             """
             def evaluateJob(self, job, phases_load, system):
                 job_CSL = job.get_CSL_routing_only()
-                
+
                 # Check only stations in the job's routing
                 for station_id in job.Routing:
                     # Apply machine ratio for human-machine stations
                     load_to_compare = job_CSL[station_id]
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
                         load_to_compare *= MACHINE_RATIO
-                    
+
                     if DYNAMIC_CAPS_ENABLED:
                         limit = system.Cap_mach[station_id]
                     else:
@@ -902,86 +917,86 @@ for config in PAR2:
 
                     if (phases_load[station_id] + load_to_compare > limit):
                         return False
-                
+
                 job.ReleaseDate = self.env.now
-                
+
                 # Only update workload for stations in the job's routing
                 for station_id in job.Routing:
                     phases_load[station_id] += job_CSL[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-        
+
             while True:
                 phases_load = get_corrected_shop_load_routing_only(self.Pools)
-                
+
                 # Sort PSP by Due Date
                 jobs_to_evaluate = []
                 for i in range(len(self.PoolUpstream)):
                     jobs_to_evaluate.append(self.PoolUpstream.get(0))
-                
+
                 jobs_to_evaluate.sort(key=lambda x: x.DueDate)
-                
+
                 # Process jobs in PRD order
                 for job in jobs_to_evaluate:
                     if not evaluateJob(self, job, phases_load, self.system):
                         self.PoolUpstream.append(job)
-                
+
                 self._urgent_job_valve()
-                    
+
                 yield env.timeout(period)
 
         def WL_release_dual(self, period):
-            
+
             ### USE IF DYNAMIC SYSTEM ###
-            
+
             def evaluateJob(self, job, machine_phases_load, human_phases_load):
                 job_machine_load, job_human_load = job.get_dual_CSL_routing_only()
-                
+
                 global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
-                
+
                 for station_id in job.Routing:
                     # Check machine constraint
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > 
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] >
                         CURRENT_MACHINE_NORM/N_PHASES):
                         return False
-                    
+
                     # Check human constraint for human-machine stations
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
-                        if (human_phases_load[station_id] + job_human_load[station_id] > 
+                        if (human_phases_load[station_id] + job_human_load[station_id] >
                             CURRENT_HUMAN_NORM/N_PHASES):
                             return False
-                
+
                 # Release job
                 job.ReleaseDate = self.env.now
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
                     human_phases_load[station_id] += job_human_load[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-            
+
             while True:
                 machine_phases_load, human_phases_load = get_corrected_shop_load_with_ratios(self.Pools)
-                
+
                 # Process jobs in arrival order
                 for _ in range(len(self.PoolUpstream)):
                     temp_job = self.PoolUpstream.get()
                     if not evaluateJob(self, temp_job, machine_phases_load, human_phases_load):
                         self.PoolUpstream.append(temp_job)
-                        
+
                 yield env.timeout(period)
-    
+
         def Human_Centric_release(self, period, workload_norm):
             ### USE IF DYNAMIC SYSTEM ###
             """
@@ -992,7 +1007,7 @@ for config in PAR2:
             def evaluateJobStage1(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 1: Check human workload constraints for collaborative jobs"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
-                
+
                 for station_id in job.Routing:
                     if DYNAMIC_CAPS_ENABLED:
                         limit = system.Cap_mach[station_id]
@@ -1000,7 +1015,7 @@ for config in PAR2:
                         limit = workload_norm / N_PHASES
                     if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
-                
+
 
                 # Check human load constraints for human-machine stations ONLY
                 for station_id in job.Routing:
@@ -1011,27 +1026,27 @@ for config in PAR2:
                             limit = workload_norm / N_PHASES
                         if (human_phases_load[station_id] + job_human_load[station_id] > limit):
                             return False
-                
+
                 # If human constraints satisfied, release the job and update both loads
                 job.ReleaseDate = self.env.now
-                
+
                 # Update workload only for stations in the job's routing
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
                     human_phases_load[station_id] += job_human_load[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-                
+
             def evaluateJobStage2(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 2: Check machine workload constraints for independent jobs (human loads fixed)"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
-                
+
                 # Check machine load constraints for all stations in routing
                 for station_id in job.Routing:
                     if DYNAMIC_CAPS_ENABLED:
@@ -1040,54 +1055,54 @@ for config in PAR2:
                         limit = workload_norm / N_PHASES
                     if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
-                
+
                 # If machine constraints satisfied, release the job
                 job.ReleaseDate = self.env.now
-                
+
                 # Update only machine workload (human loads are fixed from Stage 1)
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
                     # Do NOT update human_phases_load in Stage 2
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-        
+
             while True:
                 machine_phases_load, human_phases_load = get_corrected_shop_load_with_ratios(self.Pools)
-                
+
                 # Sort PSP by Due Date
                 all_jobs = []
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
-                
+
                 all_jobs.sort(key=lambda x: x.DueDate)
-                
+
                 # Separate collaborative and independent jobs while maintaining due date order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
                 independent_jobs = [job for job in all_jobs if not job.is_collaborative()]
-                
+
                 # STAGE 1: Process collaborative jobs with human workload constraints
                 remaining_collaborative = []
                 for job in collaborative_jobs:
                     if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_collaborative.append(job)
-                
+
                 # STAGE 2: With human loads fixed, process independent jobs with machine constraints
                 remaining_independent = []
                 for job in independent_jobs:
                     if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_independent.append(job)
-                
+
                 # Return unreleased jobs to pool (maintain PRD order)
                 for job in remaining_collaborative + remaining_independent:
                     self.PoolUpstream.append(job)
 
-                self._urgent_job_valve()   
+                self._urgent_job_valve()
                 yield env.timeout(period)
 
         def Human_Centric_release_directed(self, period, workload_norm):
@@ -1099,7 +1114,7 @@ for config in PAR2:
             def evaluateJobStage1(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 1: Check human workload constraints for collaborative jobs"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
-                
+
                 for station_id in job.Routing:
                     if DYNAMIC_CAPS_ENABLED:
                         limit = system.Cap_mach[station_id]
@@ -1107,7 +1122,7 @@ for config in PAR2:
                         limit = workload_norm / N_PHASES
                     if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
-                
+
                 # Check human load constraints for human-machine stations ONLY
                 for station_id in job.Routing:
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
@@ -1117,27 +1132,27 @@ for config in PAR2:
                             limit = workload_norm / N_PHASES
                         if (human_phases_load[station_id] + job_human_load[station_id] > limit):
                             return False
-                
+
                 # If human constraints satisfied, release the job and update both loads
                 job.ReleaseDate = self.env.now
-                
+
                 # Update workload only for stations in the job's routing
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
                     human_phases_load[station_id] += job_human_load[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-                
+
             def evaluateJobStage2(self, job, machine_phases_load, human_phases_load, system):
                 """Stage 2: Check machine workload constraints for independent jobs (human loads fixed)"""
                 job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
-                
+
                 # Check machine load constraints for all stations in routing
                 for station_id in job.Routing:
                     if DYNAMIC_CAPS_ENABLED:
@@ -1146,53 +1161,53 @@ for config in PAR2:
                         limit = workload_norm / N_PHASES
                     if (machine_phases_load[station_id] + job_machine_load[station_id] > limit):
                         return False
-                
+
                 # If machine constraints satisfied, release the job
                 job.ReleaseDate = self.env.now
-                
+
                 # Update only machine workload (human loads are fixed from Stage 1)
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
                     # Do NOT update human_phases_load in Stage 2
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-        
+
             while True:
                 machine_phases_load, human_phases_load = get_corrected_shop_load_with_ratios(self.Pools)
-                
+
                 # Sort PSP by Due Date
                 all_jobs = []
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
-                
+
                 all_jobs.sort(key=lambda x: x.DueDate)
-                
+
                 # Separate collaborative and independent jobs while maintaining due date order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
                 independent_jobs = [job for job in all_jobs if not job.is_collaborative()]
-                
+
                 # STAGE 1: Process collaborative jobs with human workload constraints
                 remaining_collaborative = []
                 for job in collaborative_jobs:
                     if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_collaborative.append(job)
-                
+
                 # STAGE 2: With human loads fixed, process independent jobs with machine constraints
                 remaining_independent = []
                 for job in independent_jobs:
                     if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load, self.system):
                         remaining_independent.append(job)
-                
+
                 # Return unreleased jobs to pool (maintain PRD order)
                 for job in remaining_collaborative + remaining_independent:
                     self.PoolUpstream.append(job)
-                
+
                 self._urgent_job_valve()
                 yield env.timeout(period)
 
@@ -1203,86 +1218,86 @@ for config in PAR2:
             def evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
                 """Stage 1: Check constraints for collaborative jobs"""
                 job_machine_load, job_human_load = job.get_dual_CSL_routing_only()
-                
+
                 global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
-                
+
                 for station_id in job.Routing:
                     # Check machine constraint
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > 
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] >
                         CURRENT_MACHINE_NORM/N_PHASES):
                         return False
-                    
+
                     # Check human constraint for human-machine stations
                     if HUMAN_MACHINE_PHASES.get(station_id, False):
-                        if (human_phases_load[station_id] + job_human_load[station_id] > 
+                        if (human_phases_load[station_id] + job_human_load[station_id] >
                             CURRENT_HUMAN_NORM/N_PHASES):
                             return False
-                
+
                 # Release job and update loads
                 job.ReleaseDate = self.env.now
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
                     human_phases_load[station_id] += job_human_load[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
-                
+
                 return True
-            
+
             def evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
                 """Stage 2: Check constraints for independent jobs"""
                 job_machine_load, job_human_load = job.get_dual_CSL_routing_only()
-                
+
                 global CURRENT_MACHINE_NORM
-                
+
                 # Only check machine constraints (human loads are fixed)
                 for station_id in job.Routing:
-                    if (machine_phases_load[station_id] + job_machine_load[station_id] > 
+                    if (machine_phases_load[station_id] + job_machine_load[station_id] >
                         CURRENT_MACHINE_NORM/N_PHASES):
                         return False
-                
+
                 # Release job
                 job.ReleaseDate = self.env.now
                 for station_id in job.Routing:
                     machine_phases_load[station_id] += job_machine_load[station_id]
-                    
+
                 self.Pools[job.Routing[0]].append(job)
-                
+
             def forceReleaseJob(self, job):
                 """Force release a job regardless of constraints"""
                 job.ReleaseDate = self.env.now
-                
+
                 # Check if job has valid position
                 if job.Position >= len(job.Routing):
                     print(f"WARNING: Force releasing job {job.id} with invalid position {job.Position}")
                     job.Position = 0  # Reset to beginning
-                
+
                 # Use current position, not always [0]
                 target_machine = job.Routing[job.Position]
                 self.Pools[target_machine].append(job)
-                
+
                 if RUN_DEBUG:
-                    global JOBS_RELEASED_DEBUG 
+                    global JOBS_RELEASED_DEBUG
                     JOBS_RELEASED_DEBUG.append(job)
 
             while True:
                 machine_phases_load, human_phases_load = get_corrected_shop_load_with_ratios(self.Pools)
-                
+
                 # Sort jobs by due date
                 all_jobs = []
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
-                
+
                 all_jobs.sort(key=lambda x: x.DueDate)
-                
+
                 # Separate jobs into categories
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
                 independent_jobs = [job for job in all_jobs if not job.is_collaborative()]
                 urgent_jobs = []
-                
+
                 # Check for jobs that need forced release
                 for job_list in [collaborative_jobs, independent_jobs]:
                     i = 0
@@ -1290,86 +1305,161 @@ for config in PAR2:
                         job = job_list[i]
                         time_in_psp = self.env.now - job.ArrivalDate
                         due_date_urgency = job.DueDate - self.env.now
-                        
+
                         # Same forced release conditions
                         if (due_date_urgency < 0 or time_in_psp > 2000 or due_date_urgency < 480):
                             urgent_jobs.append(job_list.pop(i))
                         else:
                             i += 1
-                
+
                 # Force release urgent jobs first
                 for job in urgent_jobs:
                     forceReleaseJob(self, job)
-                
+
                 if urgent_jobs and SCREEN_DEBUG:
                     print(f"HUMAN_CENTRIC forced release: {len(urgent_jobs)} jobs at time {self.env.now/480:.1f}")
-                
+
                 # Stage 1: Process remaining collaborative jobs
                 remaining_collaborative = []
                 for job in collaborative_jobs:
                     if not evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
                         remaining_collaborative.append(job)
-                
-                # Stage 2: Process remaining independent jobs  
+
+                # Stage 2: Process remaining independent jobs
                 remaining_independent = []
                 for job in independent_jobs:
                     if not evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
                         remaining_independent.append(job)
-                
+
                 # Return unreleased jobs
                 for job in remaining_collaborative + remaining_independent:
                     self.PoolUpstream.append(job)
-                    
+
                 yield env.timeout(period)
 
         def WB_MOD_release(self, period):
             """Periodically calls the WB_MOD optimizer and releases jobs based on its plan."""
             print("WB_MOD release process started.")
-            while True:
-                # 1. Prepare inputs for the optimizer
-                psp_jobs = self.PoolUpstream.get_list()
+            first_run = True
 
-                if not psp_jobs:
+            while True:
+                # 1. Defer on first run to avoid race condition with capacity setup
+                if first_run:
+                    yield self.env.timeout(1)
+                    first_run = False
+
+                # Default telemetry values for this cycle
+                self.system.WBMOD_stats = {
+                    'solve_status': "Skipped", 'psp_size': 0, 'subset_size': 0,
+                    'solve_time_sec': 0.0, 'jobs_released': 0, 'adj_minutes_planned_t0': 0.0
+                }
+
+                # 2. Check feature flag
+                if not WB_MOD_USE_OPTIMIZER:
+                    self.system.WBMOD_stats['solve_status'] = "SkippedByFlag"
+                    print(f"Time {self.env.now:.2f}: WB_MOD skipped by flag.")
+                    # Fallback test logic: release a random 20% of jobs
+                    psp_jobs = self.PoolUpstream.get_list()
+                    jobs_to_release_ids = [j.id for j in psp_jobs if random.random() < 0.2]
+
+                    remaining_jobs_in_pool = list(self.PoolUpstream.get_list())
+                    self.PoolUpstream.array.clear()
+
+                    for job in remaining_jobs_in_pool:
+                        if job.id in jobs_to_release_ids:
+                            job.ReleaseDate = self.env.now
+                            self.Pools[job.get_current_machine()].append(job)
+                        else:
+                            self.PoolUpstream.append(job)
+
+                    self.system.WBMOD_stats['jobs_released'] = len(jobs_to_release_ids)
                     yield self.env.timeout(period)
                     continue
 
-                config = {
-                    "review_horizon_T": REVIEW_HORIZON_T,
-                    "wb_mod_rho": WB_MOD_PARAMS["rho"],
-                    "wb_mod_kappa": WB_MOD_PARAMS["kappa"],
-                    "wb_mod_weights_decay": WB_MOD_PARAMS["weights_decay"],
-                    "n_phases": N_PHASES
-                }
+                # 3. Prepare inputs for the optimizer
+                all_psp_jobs = self.PoolUpstream.get_list()
+                self.system.WBMOD_stats['psp_size'] = len(all_psp_jobs)
 
-                # 2. Call the optimizer (SKIPPED FOR TESTING DUE TO PERFORMANCE ISSUES)
-                print(f"Time {self.env.now:.2f}: WB_MOD running with test logic.")
-                # Fallback test logic: release a random 20% of jobs and create a dummy plan
-                jobs_to_release_ids = [j.id for j in psp_jobs if random.random() < 0.2]
-                adj_plan_t0 = {(1, 0): 60} # Dummy plan: 60 mins from station 0 to 1
-                print(f"WB_MOD Test Logic: Releasing {len(jobs_to_release_ids)} jobs.")
+                if not all_psp_jobs:
+                    print(f"Time {self.env.now:.2f}: WB_MOD review, PSP is empty.")
+                    yield self.env.timeout(period)
+                    continue
 
-                # 3. Store the adjustment plan for workers
-                self.system.adj_plan = adj_plan_t0
+                # Sort by due date and take a subset
+                all_psp_jobs.sort(key=lambda j: j.DueDate)
+                psp_subset = all_psp_jobs[:WB_MOD_MAX_PSP]
+                self.system.WBMOD_stats['subset_size'] = len(psp_subset)
 
-                # 4. Release the selected jobs
-                remaining_jobs_in_pool = list(self.PoolUpstream.get_list())
-                self.PoolUpstream.array.clear()
+                # 4. Call the optimizer
+                jobs_to_release_ids, adj_plan_t0, status, solve_time = run_wb_mod_optimizer(
+                    psp_subset, self.system, REVIEW_HORIZON_T, WB_MOD_SOLVER_TIMEOUT
+                )
 
-                for job in remaining_jobs_in_pool:
-                    if job.id in jobs_to_release_ids:
-                        job.ReleaseDate = self.env.now
-                        self.Pools[job.get_current_machine()].append(job)
+                # 5. Update telemetry
+                self.system.WBMOD_stats['solve_status'] = status
+                self.system.WBMOD_stats['solve_time_sec'] = solve_time
+                self.system.WBMOD_stats['jobs_released'] = len(jobs_to_release_ids)
+                self.system.WBMOD_stats['adj_minutes_planned_t0'] = sum(adj_plan_t0.values())
+
+                # 6. Process optimizer results
+                use_fallback = True
+                if status in {"Optimal", "TimeLimit", "Feasible"}:
+                    if jobs_to_release_ids:
+                        print(f"Time {self.env.now:.2f}: WB_MOD releasing {len(jobs_to_release_ids)} jobs from optimizer plan.")
+                        self.system.adj_plan = adj_plan_t0
+
+                        # Efficiently release jobs
+                        jobs_to_process = {job.id: job for job in self.PoolUpstream.get_list()}
+                        self.PoolUpstream.array.clear()
+
+                        for job_id, job in jobs_to_process.items():
+                            if job_id in jobs_to_release_ids:
+                                job.ReleaseDate = self.env.now
+                                self.Pools[job.get_current_machine()].append(job)
+                            else:
+                                self.PoolUpstream.append(job)
+
+                        use_fallback = False
                     else:
-                        self.PoolUpstream.append(job)
+                        print(f"Time {self.env.now:.2f}: WB_MOD optimizer returned valid status but no jobs to release.")
 
-                # Signal to workers that a new plan is available
+                if use_fallback:
+                    print(f"Time {self.env.now:.2f}: WB_MOD falling back to WL_DIRECT logic for this cycle.")
+                    # Fallback to WL_DIRECT logic (simplified version)
+                    phases_load = get_corrected_shop_load_routing_only(self.Pools)
+                    jobs_to_evaluate = list(self.PoolUpstream.get_list())
+                    jobs_to_evaluate.sort(key=lambda x: x.DueDate)
+                    self.PoolUpstream.array.clear()
+
+                    released_count = 0
+                    for job in jobs_to_evaluate:
+                        job_CSL = job.get_CSL_routing_only()
+                        can_release = True
+                        for station_id in job.Routing:
+                            if (phases_load[station_id] + job_CSL[station_id] > CURRENT_MACHINE_NORM / N_PHASES):
+                                can_release = False
+                                break
+
+                        if can_release:
+                            job.ReleaseDate = self.env.now
+                            for station_id in job.Routing:
+                                phases_load[station_id] += job_CSL[station_id]
+                            self.Pools[job.Routing[0]].append(job)
+                            released_count += 1
+                        else:
+                            self.PoolUpstream.append(job)
+
+                    self.system.WBMOD_stats['jobs_released'] = released_count
+                    self.system.WBMOD_stats['solve_status'] = f"Fallback_{status}"
+
+                # 7. Signal workers about the new plan
                 if hasattr(self.system, 'new_adj_plan_event'):
                     if not self.system.new_adj_plan_event.triggered:
                         print(f"Time {self.env.now:.2f}: WB_MOD triggering new_adj_plan_event.")
                         self.system.new_adj_plan_event.succeed()
                     self.system.new_adj_plan_event = self.env.event()
 
-                # 5. Wait for the next review period
+                # 8. Wait for the next review period
                 yield self.env.timeout(period)
 
     class Pool(object):
@@ -1448,7 +1538,7 @@ for config in PAR2:
             # Start the machine's main processing loop.
             self.process = self.env.process(self.Machine_loop())
 
-                
+
 
         def _process_human_machine_collaborative(self, job):
             """
@@ -1458,9 +1548,9 @@ for config in PAR2:
             base_time = job.RemainingTime[self.id]
             machine_time = base_time * MACHINE_RATIO / float(self.efficiency)
             human_time = base_time * HUMAN_RATIO  # Human efficiency assumed to be 1
-            
+
             return max(machine_time, human_time)
-        
+
         def _process_human_machine_non_collaborative(self, job):
             """
             Process job on human-machine station with non-human-centric rules
@@ -1469,7 +1559,7 @@ for config in PAR2:
             base_time = job.RemainingTime[self.id]
             machine_time = base_time * MACHINE_RATIO / float(self.efficiency)
             human_time = base_time * HUMAN_RATIO  # Human efficiency assumed to be 1
-            
+
             if human_time <= machine_time:
                 # Human finishes first or at same time - same as collaborative case
                 return max(machine_time, human_time)
@@ -1477,12 +1567,12 @@ for config in PAR2:
                 # Machine finishes first - set flag and start human completion process
                 self._machine_finished_first = True
                 self._remaining_human_time = human_time - machine_time
-                
+
                 # Start a separate process to handle the human completion
                 self.env.process(self._handle_machine_first_completion(job, human_time - machine_time))
-                
+
                 return machine_time
-        
+
         def _handle_machine_first_completion(self, job, remaining_human_time):
             """
             Handle case where machine completes before human in non-collaborative rule
@@ -1490,29 +1580,29 @@ for config in PAR2:
             """
             # Wait for the remaining human processing time
             yield self.env.timeout(remaining_human_time)
-            
+
             # After human processing is complete, move job from waiting pool to next stage
             if job in self.HumanWaitingPool:
                 self.HumanWaitingPool.remove(job)
-                
+
                 # Update job completion status
                 job.Position += 1
-                
+
                 if job.Position == len(job.Routing):
                     # Job is complete
                     job.CompletationDate = self.env.now
-                    
+
                     if RUN_DEBUG:
                         global JOBS_DELIVERED_DEBUG
                         JOBS_DELIVERED_DEBUG.append(job)
-                    
+
                     self.Jobs_delivered.append(job)
                 else:
                     # Move to next station
                     self.Pools[job.get_current_machine()].append(job)
-                
+
                 self.JobsProcessed += 1
-                
+
                 # Trigger any waiting workers
                 while len(self.waiting_end_job) > 0:
                     self.waiting_end_job[0].succeed()
@@ -1556,7 +1646,7 @@ for config in PAR2:
                                 if len(self.HumanWaitingPool) > 0:
                                     # Process job from human waiting pool - no machine processing needed
                                     self.current_job = self.HumanWaitingPool.pop(0)
-                                    
+
                                     # This job is waiting for human completion only
                                     # Calculate remaining human processing time
                                     if hasattr(self.current_job, '_remaining_human_time'):
@@ -1566,19 +1656,19 @@ for config in PAR2:
                                         # Fallback - shouldn't happen
                                         base_time = self.current_job.ProcessingTime[self.id] - self.current_job.RemainingTime[self.id]
                                         remaining_human_time = base_time * HUMAN_RATIO
-                                    
+
                                     # Wait for human completion
                                     yield self.env.timeout(remaining_human_time)
-                                    
+
                                     # Human processing completed
                                     self._complete_job()
                                     continue
-                                    
+
                                 elif len(self.PoolUpstream) > 0:
                                     self.current_job = self.PoolUpstream.get()
                                     self.current_job.ArrivalDateMachines[self.id] = self.env.now
                                     # ADD THESE LINES:
-                                    
+
                                     #if job_tracker is not None:
                                      #   job_tracker.update_station_arrival(self.current_job, self.id, self.env.now)
 
@@ -1596,7 +1686,7 @@ for config in PAR2:
 
                             # Determine processing logic
                             machine_finishes_first = False
-                            
+
                             if HUMAN_MACHINE_PHASES.get(self.id, False):
                                 if RELEASE_RULE == "HUMAN_CENTRIC":
                                     # Collaborative processing - both work together
@@ -1607,7 +1697,7 @@ for config in PAR2:
                                     # Non-collaborative - check who finishes first
                                     machine_time = self.current_job.RemainingTime[self.id] * MACHINE_RATIO / float(self.efficiency)
                                     human_time = self.current_job.RemainingTime[self.id] * HUMAN_RATIO
-                                    
+
                                     if machine_time < human_time:
                                         # Machine finishes first
                                         processing_time = machine_time
@@ -1621,10 +1711,10 @@ for config in PAR2:
 
                             # Process the job
                             start_time = self.env.now
-                            
+
                             if processing_time < 0: processing_time = 0
                             yield self.env.timeout(processing_time)
-                            
+
                            # if job_tracker is not None:
                             #    job_tracker.update_station_processing(
                              #       self.current_job, self.id, start_time, self.env.now, self.efficiency
@@ -1633,7 +1723,7 @@ for config in PAR2:
                             actual_processing_time = self.env.now - start_time
                             for worker in workers_current_job:
                                 worker.WorkingTime[self.id] += actual_processing_time
-                            
+
                             self.WorkloadProcessed += (actual_processing_time * self.efficiency)
 
                             # Job processing completed
@@ -1645,11 +1735,11 @@ for config in PAR2:
                                 # Machine finished first - job waits for human completion
                                 remaining_human_time = human_time - machine_time
                                 self.current_job._remaining_human_time = remaining_human_time
-                                
+
                                 self.HumanWaitingPool.append(self.current_job)
                                 self.current_job = None
                                 self.JobsProcessed += 1
-                                
+
                                 # Trigger workers waiting for end of job
                                 while len(self.waiting_end_job) > 0:
                                     self.waiting_end_job[0].succeed()
@@ -1678,17 +1768,17 @@ for config in PAR2:
         def _complete_job(self):
             """Helper method to complete a job and move it to next stage"""
             self.current_job.Position += 1
-            
+
             if self.current_job.Position == len(self.current_job.Routing):
                 # Check if job already delivered (add this check!)
                 if not hasattr(self.current_job, '_already_delivered'):
                     self.current_job.CompletationDate = self.env.now
                     self.current_job._already_delivered = True  # Mark as delivered
-                    
+
                     if RUN_DEBUG:
                         global JOBS_DELIVERED_DEBUG
                         JOBS_DELIVERED_DEBUG.append(self.current_job)
-                    
+
                     self.Jobs_delivered.append(self.current_job)
             else:
                 # Move to next station
@@ -1701,7 +1791,7 @@ for config in PAR2:
             # Trigger waiting workers
             while len(self.waiting_end_job) > 0:
                 self.waiting_end_job[0].succeed()
-                del self.waiting_end_job[0]                            
+                del self.waiting_end_job[0]
 
     class Worker(object):
         """
@@ -2108,8 +2198,8 @@ for config in PAR2:
                 print(f"Time {self.env.now:.2f}: Worker {self.id} waiting for events.")
                 yield self.env.timeout(PERMANENCE_TIME)
                 yield AnyOf(self.env, waiting_events)
-                print(f"Time {self.env.now:.2f}: Worker {self.id} woke up.")    
-    
+                print(f"Time {self.env.now:.2f}: Worker {self.id} woke up.")
+
     class DynamicConstraintManager:
         def __init__(self, env, scenario_config, system):
             self.env = env
@@ -2118,7 +2208,7 @@ for config in PAR2:
             self.switch_count = 0
             # self.current_human_norm = scenario_config.get("base_human", scenario_config.get("human_norm", 1000))
             # self.current_machine_norm = scenario_config.get("base_machine", scenario_config.get("machine_norm", 1000))
-            
+
             # global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
             # CURRENT_HUMAN_NORM = self.current_human_norm
             # CURRENT_MACHINE_NORM = self.current_machine_norm
@@ -2127,34 +2217,34 @@ for config in PAR2:
 
             if scenario_config["type"] == "dynamic" and DYNAMIC_CAPS_ENABLED:
                 env.process(self.availability_switching_process())
-        
+
         def availability_switching_process(self):
             """Switch availability factors dynamically."""
             switch_freq = self.config["switch_frequency"]
-            # base_human = self.config["base_human"] 
+            # base_human = self.config["base_human"]
             # base_machine = self.config["base_machine"]
-            
+
             while True:
                 yield self.env.timeout(switch_freq)
                 self.switch_count += 1
-                
+
                 # Example of dynamic availability: simulate a machine breakdown or absenteeism
                 # This can be made more sophisticated later.
                 for i in range(N_PHASES):
                     # Randomly dip availability
                     self.system.A_mach[i] = random.choice([1.0, 1.0, 1.0, 0.8]) # 25% chance of 20% downtime
                     self.system.A_hum[i] = random.choice([1.0, 1.0, 0.9, 0.85]) # Chance of absenteeism
-                
+
                 # Update the effective capacities in the system
                 self.system.update_effective_capacities()
-                
+
                 if SCREEN_DEBUG:
                     print(f"Time {self.env.now/480:.1f}: Availability updated.")
                     print(f"  A_mach: {[round(x, 2) for x in self.system.A_mach]}")
                     print(f"  Cap_mach: {[round(x, 1) for x in self.system.Cap_mach]}")
                     print(f"  A_hum: {[round(x, 2) for x in self.system.A_hum]}")
                     print(f"  Cap_hum: {[round(x, 1) for x in self.system.Cap_hum]}")
-    
+
     class System(object):
         """
         The main class that sets up and manages the entire simulation environment,
@@ -2175,10 +2265,8 @@ for config in PAR2:
             self.Workers = [Worker(env, i, self.Pools, self.Machines, i, self) for i in range(N_WORKERS)]
             # Start the job generator.
             self.generator = Jobs_generator(env, self.PSP)
-            # Start the order release mechanism.
-            self.OR = Orders_release(env, RELEASE_RULE, self, WORKLOAD_NORMS[WLIndex])
 
-            # Initialize base and effective capacities
+            # Initialize base and effective capacities before setting up order release
             self.BaseCap_mach = [0] * N_PHASES
             self.BaseCap_hum = [0] * N_PHASES
             self.A_mach = [1.0] * N_PHASES # Availability factors, default to 1.0
@@ -2186,24 +2274,41 @@ for config in PAR2:
             self.Cap_mach = [0] * N_PHASES
             self.Cap_hum = [0] * N_PHASES
             self.setup_capacities()
-            
+
+            # Start the order release mechanism.
+            self.OR = Orders_release(env, RELEASE_RULE, self, WORKLOAD_NORMS[WLIndex])
+
             self.adj_plan = {}
             self.new_adj_plan_event = env.event()
 
+            # Store parameters for the optimizer to access
+            self.WB_MOD_PARAMS = WB_MOD_PARAMS
+            self.N_PHASES = N_PHASES
+
+            # Initialize telemetry storage
+            self.WBMOD_stats = {
+                'solve_status': "N/A",
+                'psp_size': 0,
+                'subset_size': 0,
+                'solve_time_sec': 0.0,
+                'jobs_released': 0,
+                'adj_minutes_planned_t0': 0.0
+            }
+
             ### USE IF DYNAMIC SYSTEM ###
-            
+
             global CONSTRAINT_SCENARIO
             scenario_config = CONSTRAINT_SCENARIOS[CONSTRAINT_SCENARIO]
-            
+
             if scenario_config["type"] == "static":
                 global CURRENT_HUMAN_NORM, CURRENT_MACHINE_NORM
                 CURRENT_HUMAN_NORM = scenario_config["human_norm"]
                 CURRENT_MACHINE_NORM = scenario_config["machine_norm"]
-            
+
             self.constraint_manager = DynamicConstraintManager(env, scenario_config, self)
             self.env.process(self.monitor_stations(480)) # Monitor once per day
-            
-        
+
+
         def monitor_stations(self, period):
             while True:
                 yield self.env.timeout(period)
@@ -2265,7 +2370,7 @@ for config in PAR2:
                 job_contribution = job.get_CAW()
                 for i in range(N_PHASES):
                     aggregated_WL[i] += job_contribution[i]
-        
+
         return aggregated_WL
 
     def get_shop_load(pools):
@@ -2284,7 +2389,7 @@ for config in PAR2:
         for pool in pools:
             for job in pool:
                 shop_load+=job.ShopLoad
-        return shop_load 
+        return shop_load
 
     def get_corrected_shop_load(pools):
         """Calculates the corrected shop load using the CSL method for each job."""
@@ -2325,7 +2430,7 @@ for config in PAR2:
             while(len(JOBS_RELEASED_DEBUG)>0):
                 del(JOBS_RELEASED_DEBUG[0])
             while(len(JOBS_ENTRY_DEBUG)>0):
-                del(JOBS_ENTRY_DEBUG[0]) 
+                del(JOBS_ENTRY_DEBUG[0])
         yield env.timeout(480/2)
         global results_DEBUG
         results_index=0
@@ -2334,7 +2439,7 @@ for config in PAR2:
             if run == 0 :
                 units = -1
                 if len(JOBS_DELIVERED_DEBUG)>0:
-                    units=len(JOBS_DELIVERED_DEBUG)  
+                    units=len(JOBS_DELIVERED_DEBUG)
                 result = {
                     "time":(env.now-TIME_BTW_DEBUGS),
                     "WL entry":(sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG)),
@@ -2381,7 +2486,7 @@ for config in PAR2:
             else:
                 units = -1
                 if len(JOBS_DELIVERED_DEBUG)>0:
-                    units=len(JOBS_DELIVERED_DEBUG)  
+                    units=len(JOBS_DELIVERED_DEBUG)
                 results_DEBUG[results_index]["WL entry"]+=(sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG))
                 results_DEBUG[results_index]["WL released"]+=(sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
                 results_DEBUG[results_index]["WL processed"]+=(sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
@@ -2422,11 +2527,11 @@ for config in PAR2:
             while(len(JOBS_RELEASED_DEBUG)>0):
                 del(JOBS_RELEASED_DEBUG[0])
             while(len(JOBS_ENTRY_DEBUG)>0):
-                del(JOBS_ENTRY_DEBUG[0])        
-    
+                del(JOBS_ENTRY_DEBUG[0])
+
     def debug5_write():
-        global  results_DEBUG      
-        # Record one performance over time 
+        global  results_DEBUG
+        # Record one performance over time
         access_type='w'
         with open('daily_RUN_DEBUG5_'+RELEASE_RULE+"_"+WORKER_MODE+ "_" + WORKER_FLEXIBILITY +"_"+str(WORKLOAD_NORMS[WLIndex])+'.csv', access_type) as csvfile:
             fieldnames = [
@@ -2475,7 +2580,7 @@ for config in PAR2:
             #if(run==0):
             writer.writeheader()
             CURTIME = 0
-            CURTIME += WARMUP 
+            CURTIME += WARMUP
             CURTIME += 480/2
             index=0
             while(CURTIME<SIMULATION_LENGTH-TIME_BTW_DEBUGS):
@@ -2501,12 +2606,12 @@ for config in PAR2:
                     "Tardy":(results_DEBUG[index]["Tardy"]/N_SIMULATION_RUNS),
                     "STDLateness":(results_DEBUG[index]["STDLateness"]/N_SIMULATION_RUNS),
                     ### USE IF DYNAMIC SYSTEM ###
-                    
+
                     'Constraint Scenario': CONSTRAINT_SCENARIO,
-                    'Current Human Norm': CURRENT_HUMAN_NORM,                    
-                    'Current Machine Norm': CURRENT_MACHINE_NORM,                    
+                    'Current Human Norm': CURRENT_HUMAN_NORM,
+                    'Current Machine Norm': CURRENT_MACHINE_NORM,
                     'Constraint Switches': getattr(system.constraint_manager, 'switch_count', 0)
-                    
+
                 }
                 #print(results_DEBUG[index]["GTT"])
                 # Queues information
@@ -2534,10 +2639,10 @@ for config in PAR2:
                     row["Queue Length-" + str(i)] = (results_DEBUG[index]["Queue Length-" + str(i)] / N_SIMULATION_RUNS)
                 writer.writerow(row)
                 index+=1
-    
+
     def screenDebug(env, run, system ):
         while 1:
-            
+
             yield env.timeout(TIME_BTW_SCREEN_DEBUGS)
             FinishedUnits = -1
             if len(system.Jobs_delivered)>0:
@@ -2550,7 +2655,7 @@ for config in PAR2:
             print("\n")
             #   pools info
             SL = get_shop_load(system.Pools)
-            CAW = get_corrected_aggregated_workload(system.Pools)     
+            CAW = get_corrected_aggregated_workload(system.Pools)
             print("PSP - %d jobs"%(len(system.PSP)))
             for index_pool in range(len(system.Pools)):
                 print("Pool: %d \t %d jobs \t SL:%d \t CAW - %d"%(system.Pools[index_pool].id, len(system.Pools[index_pool]),SL[index_pool],CAW[index_pool]))
@@ -2558,7 +2663,7 @@ for config in PAR2:
             print((sum(sum(worker.WorkingTime) for worker in system.Workers))/(env.now*5))
             print()
             ### USE IF DYNAMIC SYSTEM ###
-            
+
             if len(system.PSP) > 0:
                 print(f"PSP size: {len(system.PSP)}")
                 print(f"Current constraints - Human: {CURRENT_HUMAN_NORM:.0f}, Machine: {CURRENT_MACHINE_NORM:.0f}")
@@ -2575,7 +2680,7 @@ for config in PAR2:
                         h_would_exceed = (human_load[station_id] + job_h_load[station_id]) > h_limit if HUMAN_MACHINE_PHASES.get(station_id, False) else False
                         if m_would_exceed or h_would_exceed:
                             print(f"  Station {station_id}: M_exceed={m_would_exceed}, H_exceed={h_would_exceed}")
-            
+
 
             if (env.now > WARMUP):
                 net_time=env.now-WARMUP
@@ -2597,10 +2702,10 @@ for config in PAR2:
                 print("Jobs delivered/Jobs generated: %f"%((FinishedUnits)/float(system.generator.generated_orders)))
                 """
                 z = (str(PT) for PT in system.generator.generated_processing_time)
-                print("WL generated:\t", "\t".join(z))            
+                print("WL generated:\t", "\t".join(z))
                 print("WL released:\t", "\t".join((str(PT) for PT in system.OR.released_workload)))
                 print("Machine WL:\t", "\t".join(str(machine.WorkloadProcessed) for machine in system.Machines))
-                y = (str(round(sum(worker.WorkloadProcessed[i] for worker in system.Workers),6)) for i in range(N_PHASES))            
+                y = (str(round(sum(worker.WorkloadProcessed[i] for worker in system.Workers),6)) for i in range(N_PHASES))
                 print("Worker WL:\t", "\t".join(y))
                 x = (str(sum(job.ProcessingTime[i] for job in system.Jobs_delivered)) for i in range(N_PHASES))
                 print("Jobs total WL:\t", "\t".join(x))
@@ -2629,10 +2734,10 @@ for config in PAR2:
                 print("Jobs delivered/Jobs generated: %f"%((FinishedUnits)/float(system.generator.generated_orders)))
                 """
                 z = (str(PT) for PT in system.generator.generated_processing_time)
-                print("WL generated:\t", "\t".join(z))            
+                print("WL generated:\t", "\t".join(z))
                 print("WL released:\t", "\t".join((str(PT) for PT in system.OR.released_workload)))
                 print("Machine WL:\t", "\t".join(str(machine.WorkloadProcessed) for machine in system.Machines))
-                y = (str(round(sum(worker.WorkloadProcessed[i] for worker in system.Workers),6)) for i in range(N_PHASES))            
+                y = (str(round(sum(worker.WorkloadProcessed[i] for worker in system.Workers),6)) for i in range(N_PHASES))
                 print("Worker WL:\t", "\t".join(y))
                 #a = ((float(z[i]) - float(y[i])) for i in range(N_PHASES))
                 #print("Generated-processed total WL:", "\t".join(str(i) for i in a))
@@ -2648,7 +2753,7 @@ for config in PAR2:
                 """
             #print("GTT", sum(job.get_GTT() for job in system.Jobs_delivered)/len(system.Jobs_delivered))
             #print("SFT", sum(job.get_SFT() for job in system.Jobs_delivered)/len(system.Jobs_delivered))
-    
+
     def analyze_dual_constraint_results():
         # Load results from all your CSV files
         df_list = []
@@ -2668,27 +2773,27 @@ for config in PAR2:
         grouped = df.groupby(['Release rule', 'Constraint Scenario'])
         results_summary = grouped.agg({
             'Av. GTT': ['mean', 'std'],
-            'Av. SFT': ['mean', 'std'], 
+            'Av. SFT': ['mean', 'std'],
             'Tardy': ['mean', 'std']
         }).round(2)
         print("=== RELEASE RULE PERFORMANCE BY SCENARIO ===")
         print(results_summary)
         return df
     # MAIN
-    for WLIndex in range(0,len(WORKLOAD_NORMS)):             
+    for WLIndex in range(0,len(WORKLOAD_NORMS)):
         for run in range(FIRST_RUN, LAST_RUN):
             np.random.seed(54363*run)
             env = simpy.Environment()
             system = System(env)
             if WARMUP!=0:
                 # Reset statistics after WARMUP time units
-                env.process(ResetStatistics(env, WARMUP,system))    
+                env.process(ResetStatistics(env, WARMUP,system))
             # <if run debug>
             if RUN_DEBUG:
                 env.process(RunDebug5(env, run,system))
             # </>
             if SCREEN_DEBUG:
-                env.process(screenDebug(env, run,system))            
+                env.process(screenDebug(env, run,system))
             env.run(until = SIMULATION_LENGTH)
             FinishedUnits = -1
             if len(system.Jobs_delivered) > 0:
@@ -2698,10 +2803,10 @@ for config in PAR2:
                 if run > 0 or WLIndex > 0:
                     access_type = 'a'
                 if CSV_OUTPUT_JOBS is True:
-                    with open('JobsOutput_' + RELEASE_RULE + "_" + WORKER_MODE + "_" + 
-                            WORKER_FLEXIBILITY + "_" + str(WORKLOAD_NORMS[WLIndex]) + 
+                    with open('JobsOutput_' + RELEASE_RULE + "_" + WORKER_MODE + "_" +
+                            WORKER_FLEXIBILITY + "_" + str(WORKLOAD_NORMS[WLIndex]) +
                             "_" + str(run) + '.csv', access_type) as csvfile:
-                        fieldnames = ['Workload','nrun','id', 'Arrival Date', 'Due Date', 
+                        fieldnames = ['Workload','nrun','id', 'Arrival Date', 'Due Date',
                                     'Completation Date', 'GTT','SFT','Tardiness','Lateness', 'ForceReleased']
                         for i in range(N_PHASES):
                             fieldnames.append("PT("+str(i)+")")
@@ -2714,7 +2819,7 @@ for config in PAR2:
                         for i in range(N_PHASES):
                             fieldnames.append("Arrival date on M(" + str(i) + ")")
                         for i in range(N_PHASES):
-                            fieldnames.append("Completion date on M(" + str(i) + ")")                        
+                            fieldnames.append("Completion date on M(" + str(i) + ")")
                         # ... rest of your existing fieldnames ...
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames,lineterminator="\r")
                         if access_type == 'w':
@@ -2763,7 +2868,7 @@ for config in PAR2:
                         'StarvationAvoidance',
                         'Shopflow',
                         'Shoplength',
-                        'nrun', 
+                        'nrun',
                         # 'Job Entry',
                         'Exit Rate',
                         'Total Processed Workload',
@@ -2784,7 +2889,7 @@ for config in PAR2:
                         # Workers information
                         # worker working time
                         for i in range(N_WORKERS):
-                            for j in range(N_PHASES):   
+                            for j in range(N_PHASES):
                                 fieldnames.append("W"+str(i)+"-M"+str(j))
                         # worker idleness
                         for i in range(N_WORKERS):
@@ -2806,6 +2911,13 @@ for config in PAR2:
                         for i in range(N_PHASES):
                             fieldnames.append("M"+str(i)+" OvermannedMins")
                             fieldnames.append("M"+str(i)+" EmptyMins")
+
+                        # WB_MOD Telemetry
+                        fieldnames.extend([
+                            'WBMOD_solve_status', 'WBMOD_psp_size', 'WBMOD_subset_size',
+                            'WBMOD_solve_time_sec', 'WBMOD_jobs_released', 'WBMOD_adj_minutes_planned_t0'
+                        ])
+
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, lineterminator="\r")
                         if  access_type=='w':
                             writer.writeheader()
@@ -2821,10 +2933,10 @@ for config in PAR2:
                             'nrun':run,
                             #'Job Entry':((generator.generated_orders-len(Rejected_orders))/float(generator.generated_orders)),
                             'Exit Rate':(FinishedUnits/float(net_time)),
-                            'Total Processed Workload':(sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)),                    
+                            'Total Processed Workload':(sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)),
                             'Forced_releases_count':system.OR.Forced_releases_count,
                             'Av. GTT': (sum(job.get_GTT() for job in jobs)/FinishedUnits),
-                            'Av. SFT': (sum(job.get_SFT() for job in jobs)/FinishedUnits),                
+                            'Av. SFT': (sum(job.get_SFT() for job in jobs)/FinishedUnits),
                             'Av. Tardiness':(sum(job.get_tardiness() for job in jobs)/FinishedUnits),
                             'Av. Lateness':(sum(job.get_lateness() for job in jobs)/FinishedUnits),
                             'Tardy':(sum(job.get_tardy() for job in jobs)/float(FinishedUnits)),
@@ -2843,7 +2955,7 @@ for config in PAR2:
                         row["Total Shop Load"]=(sum(sl))
                         # Workers information
                         for i in range(N_WORKERS):
-                            for j in range(N_PHASES):   
+                            for j in range(N_PHASES):
                                 row["W"+str(i)+"-M"+str(j)]=(system.Workers[i].WorkingTime[j])/(net_time)
                         # Capacity information
                         for i in range(N_PHASES):
@@ -2871,6 +2983,17 @@ for config in PAR2:
                             row["Machine "+str(machine.id)+" eff.(%)"]=(machine.WorkloadProcessed/(net_time))
                             row["M"+str(machine.id)+" OvermannedMins"] = machine.overmanned_minutes
                             row["M"+str(machine.id)+" EmptyMins"] = machine.empty_station_minutes
+
+                        # Add new telemetry values
+                        row.update({
+                            'WBMOD_solve_status': system.WBMOD_stats['solve_status'],
+                            'WBMOD_psp_size': system.WBMOD_stats['psp_size'],
+                            'WBMOD_subset_size': system.WBMOD_stats['subset_size'],
+                            'WBMOD_solve_time_sec': system.WBMOD_stats['solve_time_sec'],
+                            'WBMOD_jobs_released': system.WBMOD_stats['jobs_released'],
+                            'WBMOD_adj_minutes_planned_t0': system.WBMOD_stats['adj_minutes_planned_t0']
+                        })
+
                         writer.writerow(row)
         # <if run debug>
         if RUN_DEBUG:
