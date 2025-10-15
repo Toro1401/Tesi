@@ -27,7 +27,6 @@ PERMANENCE_TIME = 0
 SHOP_FLOW = "directed"                    # directed or undirected
 SHOP_LENGTH = "variable"                    # a number or "variable"
 
-
 # JOBS PARAMETERS
 JOBS_MEAN = 30
 JOBS_VARIANCE = 900
@@ -41,7 +40,6 @@ UNIFIED_RESULTS = []
 
 # JOBS RELEASE PARAMETERS
 ABSENTEEISM_LEVEL = 0.0  # Will be set by parameter sweep
-
 
 ###########################################
 PAR1=[
@@ -116,7 +114,6 @@ for config in PAR2:
         elif SHOP_FLOW=="undirected" and SHOP_LENGTH=="variable":
             WORKLOAD_NORMS = [1450,1500,1600,1900,2000, 0]
 
-
         # HUMAN-MACHINE WORKSTATION CONFIGURATION
 
     HUMAN_MACHINE_PHASES = {
@@ -187,9 +184,6 @@ for config in PAR2:
         else:
 
             configurations=list(permutations([i for i in range(N_PHASES)], r=int(SHOP_LENGTH)))
-
-
-
         if(SHOP_FLOW == "directed" ):
 
             def is_directed(configuration):
@@ -201,7 +195,6 @@ for config in PAR2:
                         return False
 
                 return True
-
 
             i=0
             while(i<len(configurations)):
@@ -312,7 +305,6 @@ for config in PAR2:
             global DUE_DATE_MIN
             global DUE_DATE_MAX
 
-
             self.id = id
 
             self.ArrivalDate = env.now
@@ -349,7 +341,6 @@ for config in PAR2:
 
                     self.Routing.append(x)
 
-
             if SHOP_FLOW=="directed":
 
                 self.Routing.sort()
@@ -363,7 +354,6 @@ for config in PAR2:
             DUE_DATE_MIN = 83.686*len(self.Routing)
 
             self.DueDate = self.ArrivalDate + np.random.uniform(DUE_DATE_MIN,DUE_DATE_MAX)
-
 
             self.ProcessingTime = list(0 for i in range(N_PHASES))
 
@@ -379,7 +369,6 @@ for config in PAR2:
 
             self.RemainingTime = list(self.ProcessingTime)
 
-
             self.Position = 0
 
             self.ShopLoad=sum(self.ProcessingTime)
@@ -394,7 +383,6 @@ for config in PAR2:
             #print(self.ProcessingTime)
             #print(self.get_CAW())
             #die()
-
 
         def get_current_machine(self):
             """
@@ -816,7 +804,6 @@ for config in PAR2:
 
                     self.PoolDownstream.append(Job(self.env, self.generated_orders))
 
-
                 # <if run debug>
                 global JOBS_ENTRY_DEBUG
 
@@ -852,7 +839,6 @@ for config in PAR2:
 
                     JOBS_ENTRY_DEBUG.append(job)
                 # </>
-
 
                 self.generated_orders += 1
 
@@ -1015,7 +1001,6 @@ for config in PAR2:
             self.system.release_trigger = self.env.event()
             self.absenteeism_manager = system.absenteeism_manager
 
-
             if rule == "IM":      # immediate release
                 self.env.process(self.Immediate_release())
 
@@ -1035,7 +1020,6 @@ for config in PAR2:
                 print("Release algorithm not recognised in Orders_release")
 
                 exit()
-
         def _get_adjusted_workload_norm(self, base_workload_norm):
             """
             Get workload norm adjusted for machine reliability.
@@ -1576,7 +1560,6 @@ for config in PAR2:
                     # PROCESS JOBS - DIRECTED FLOW: Use corrected shop load
                     machine_phases_load, human_phases_load = get_corrected_aggregated_workload_with_ratios(self.Pools)
 
-
                     # Sort by arrival date for directed flow
                     all_jobs = []
                     for i in range(len(self.PoolUpstream)):
@@ -2006,7 +1989,6 @@ for config in PAR2:
             Jobs_delivered (Pool): The pool for completed jobs.
         """
 
-
         def __init__(self, env, id, PoolUpstream, Jobs_delivered, Pools, PSP,
                     has_worker=False, processing_mode='machine_centric',
                     absenteeism_manager=None, downtime_manager=None):
@@ -2321,7 +2303,6 @@ for config in PAR2:
                     Defaults to None.
             """
 
-
             self.env = env
 
             self.skillperphase = list()
@@ -2363,9 +2344,6 @@ for config in PAR2:
             else:
 
                 exit("wrong worker flexibility ")
-
-
-
             self.waiting_events = None
 
             #self.WorkloadProcessed = list(0 for i in range(N_PHASES))
@@ -2373,7 +2351,6 @@ for config in PAR2:
 
             # capacity adjstment for the current period
             self.Capacity_adjustment = list(0 for i in range(N_PHASES))
-
 
             if 'WORKER_MODE' not in globals():
 
@@ -2387,15 +2364,10 @@ for config in PAR2:
 
                 self.process = self.env.process(self._ReactiveWorker(Machines,None))
 
-
-
             elif WORKER_MODE == 'flexible':
                 # output control
-
-                    self.process = self.env.process(self._Flexible_loop(Machines,None))
-
+                self.process = self.env.process(self._Flexible_loop(Machines,None))
             else:
-
                 exit("Worker mode not recognised")
 
         def _SetMonoSkill(self):
@@ -2719,7 +2691,6 @@ for config in PAR2:
 
                             break
 
-
                 # Transfer to the next machine
 
                 if self.current_machine_id != next_machine:
@@ -2735,7 +2706,6 @@ for config in PAR2:
                     if Machines[self.current_machine_id].waiting_new_workers.triggered == False:
 
                         Machines[self.current_machine_id].waiting_new_workers.succeed()
-
 
                 start=self.env.now
 
@@ -3303,7 +3273,6 @@ for config in PAR2:
             OR (Orders_release): The order release mechanism.
         """
 
-
         def __init__(self, env, absenteeism_level_key="none", downtime_level_key="none",
                     machine_absenteeism_type="daily"):
             """
@@ -3404,7 +3373,6 @@ for config in PAR2:
                         direct_WL[i] += job.RemainingTime[i]
 
                         break
-
 
         return direct_WL
 
@@ -3518,14 +3486,11 @@ for config in PAR2:
         #for i in range(1000):
         #    print("RESETTING")
 
-
         in_pools = sum(len(pool) for pool in system.Pools)
         in_psp = len(system.PSP)
         in_proc = sum(1 for m in system.Machines if m.current_job is not None)
 
-
         system.generator.generated_orders = in_pools + in_psp + in_proc
-
 
         for machine in system.Machines:
 
@@ -3575,15 +3540,12 @@ for config in PAR2:
 
             yield env.timeout(TIME_BTW_DEBUGS)
 
-
             if run == 0 :
 
                 units = -1
                 if len(JOBS_DELIVERED_DEBUG)>0:
 
                     units=len(JOBS_DELIVERED_DEBUG)
-
-
 
                 result = {
 
@@ -3600,9 +3562,7 @@ for config in PAR2:
                     "Tardy":(sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG)/float(units)),
                     "STDLateness":(np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))),
 
-
                 }
-
 
                 # Queues information
                 result["PSP Shop Load"]=(sum(sum(job.ProcessingTime) for job in system.PSP))
@@ -3654,9 +3614,7 @@ for config in PAR2:
 
                     result["Queue Length-" + str(i)] = ql[i]
 
-
                 results_DEBUG.append(result)
-
 
             else:
 
@@ -3675,8 +3633,6 @@ for config in PAR2:
                 results_DEBUG[results_index]["Lateness"]+=(sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)/units)
                 results_DEBUG[results_index]["Tardy"]+=(sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG)/float(units))
                 results_DEBUG[results_index]["STDLateness"]+=(np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG))))
-
-
 
                 # Queues information
                 results_DEBUG[results_index]["PSP Shop Load"]+=(sum(sum(job.ProcessingTime) for job in system.PSP))
@@ -3804,8 +3760,6 @@ for config in PAR2:
 
             writer.writeheader()
 
-
-
             CURTIME = 0
             CURTIME += WARMUP
             CURTIME += 480/2
@@ -3818,7 +3772,6 @@ for config in PAR2:
                 CURTIME+=TIME_BTW_DEBUGS
                 N_SIMULATION_RUNS = LAST_RUN - FIRST_RUN
                 #print(N_SIMULATION_RUNS)
-
 
                 row = {}
                 #print(results_DEBUG)
@@ -3839,8 +3792,6 @@ for config in PAR2:
                     "Lateness":(results_DEBUG[index]["Lateness"]/N_SIMULATION_RUNS),
                     "Tardy":(results_DEBUG[index]["Tardy"]/N_SIMULATION_RUNS),
                     "STDLateness":(results_DEBUG[index]["STDLateness"]/N_SIMULATION_RUNS),
-
-
 
                 }
                 #print(results_DEBUG[index]["GTT"])
@@ -3905,7 +3856,6 @@ for config in PAR2:
             total_simulations = (len(WORKLOAD_NORMS)*(LAST_RUN-FIRST_RUN))
             done_simulations = max(1,(WLIndex*(LAST_RUN-FIRST_RUN) + run))
 
-
             print ("### Day:%d - Rel.rule: %s - Work.Mode: %s - Run: %d - WLN:%d - runs: %d/%d \t remaining time:%d h\t%d h\t###\n"%(env.now/480,RELEASE_RULE,WORKER_MODE,run,WORKLOAD_NORMS[WLIndex],done_simulations, total_simulations, (total_simulations-done_simulations)*(time.time()-start)/done_simulations/60/60,(time.time()-start)/60/60))
             print("\n")
 
@@ -3923,7 +3873,6 @@ for config in PAR2:
 
             print((sum(sum(worker.WorkingTime) for worker in system.Workers))/(env.now*5))
             print()
-
 
             if (env.now > WARMUP):
 
@@ -3974,7 +3923,6 @@ for config in PAR2:
                 print("DELIVERED/PROC. Mach\t", (sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)/sum(machine.WorkloadProcessed for machine in system.Machines)))
                 """
 
-
             else:
 
                 #   machines info
@@ -4013,7 +3961,6 @@ for config in PAR2:
                 #a = ((float(z[i]) - float(y[i])) for i in range(N_PHASES))
 
                 #print("Generated-processed total WL:", "\t".join(str(i) for i in a))
-
 
                 #print("Jobs total WL:", sum(sum(job.ProcessingTime) for job in system.Jobs_delivered))
                 x = (str(sum(job.ProcessingTime[i] for job in system.Jobs_delivered)) for i in range(N_PHASES))
@@ -4080,7 +4027,6 @@ for config in PAR2:
 
     for WLIndex in range(0,len(WORKLOAD_NORMS)):
 
-
         for run in range(FIRST_RUN, LAST_RUN):
 
             np.random.seed(54363*run)
@@ -4088,8 +4034,6 @@ for config in PAR2:
             env = simpy.Environment()
 
             system = System(env, ABSENTEEISM_LEVEL, DOWNTIME_LEVEL, MACHINE_ABSENTEEISM_TYPE)
-
-
 
             if WARMUP!=0:
                 # Reset statistics after WARMUP time units
@@ -4105,8 +4049,6 @@ for config in PAR2:
                 env.process(screenDebug(env, run,system))
 
             env.run(until = SIMULATION_LENGTH)
-
-
 
             FinishedUnits = -1
 
@@ -4304,8 +4246,6 @@ for config in PAR2:
                             'Shopflow':SHOP_FLOW,
                             'Shoplength':str(SHOP_LENGTH),
 
-
-
                             'nrun':run,
                             #'Job Entry':((generator.generated_orders-len(Rejected_orders))/float(generator.generated_orders)),
 
@@ -4320,7 +4260,6 @@ for config in PAR2:
                             'STD Lateness':(np.std(np.array(list(job.get_lateness() for job in jobs)))),
 
                             }
-
 
                         # Queues information
                         sl = get_shop_load(system.Pools)
@@ -4352,7 +4291,6 @@ for config in PAR2:
                         for i in range(N_WORKERS):
                             for j in range(N_PHASES):
                                 row["Rel-W" + str(i) + "-M" + str(j)] = system.Workers[i].relocation[j]
-
 
                         # Machines
                         for machine in system.Machines:
