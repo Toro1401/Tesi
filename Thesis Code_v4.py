@@ -2570,21 +2570,37 @@ for config in PAR2:
         while(env.now<SIMULATION_LENGTH-TIME_BTW_DEBUGS):
             yield env.timeout(TIME_BTW_DEBUGS)
             if run == 0 :
-                units = -1
-                if len(JOBS_DELIVERED_DEBUG)>0:
-                    units=len(JOBS_DELIVERED_DEBUG)
+                units = 0
+                if len(JOBS_DELIVERED_DEBUG) > 0:
+                    units = len(JOBS_DELIVERED_DEBUG)
+
+                gtt = 0.0
+                sft = 0.0
+                tardiness = 0.0
+                lateness = 0.0
+                tardy = 0.0
+                std_lateness = 0.0
+
+                if units > 0:
+                    gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
+                    sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
+                    lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
+                    std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
+
                 result = {
-                    "time":(env.now-TIME_BTW_DEBUGS),
-                    "WL entry":(sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG)),
-                    "WL released":(sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG)),
-                    "WL processed":(sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG)),
-                    "Jobs processed":units,
-                    "GTT":(sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG)/units),
-                    "SFT":(sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG)/units),
-                    "Tardiness":(sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG)/units),
-                    "Lateness":(sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)/units),
-                    "Tardy":(sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG)/float(units)),
-                    "STDLateness":(np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))),
+                    "time": (env.now - TIME_BTW_DEBUGS),
+                    "WL entry": (sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG)),
+                    "WL released": (sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG)),
+                    "WL processed": (sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG)),
+                    "Jobs processed": units,
+                    "GTT": gtt,
+                    "SFT": sft,
+                    "Tardiness": tardiness,
+                    "Lateness": lateness,
+                    "Tardy": tardy,
+                    "STDLateness": std_lateness,
                 }
                 # Queues information
                 result["PSP Shop Load"]=(sum(sum(job.ProcessingTime) for job in system.PSP))
@@ -2617,19 +2633,35 @@ for config in PAR2:
                     result["Queue Length-" + str(i)] = ql[i]
                 results_DEBUG.append(result)
             else:
-                units = -1
-                if len(JOBS_DELIVERED_DEBUG)>0:
-                    units=len(JOBS_DELIVERED_DEBUG)
-                results_DEBUG[results_index]["WL entry"]+=(sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG))
-                results_DEBUG[results_index]["WL released"]+=(sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
-                results_DEBUG[results_index]["WL processed"]+=(sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
-                results_DEBUG[results_index]["Jobs processed"]+=(units)
-                results_DEBUG[results_index]["GTT"]+=(sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG)/units)
-                results_DEBUG[results_index]["SFT"]+=(sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG)/units)
-                results_DEBUG[results_index]["Tardiness"]+=(sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG)/units)
-                results_DEBUG[results_index]["Lateness"]+=(sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)/units)
-                results_DEBUG[results_index]["Tardy"]+=(sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG)/float(units))
-                results_DEBUG[results_index]["STDLateness"]+=(np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG))))
+                units = 0
+                if len(JOBS_DELIVERED_DEBUG) > 0:
+                    units = len(JOBS_DELIVERED_DEBUG)
+
+                gtt = 0.0
+                sft = 0.0
+                tardiness = 0.0
+                lateness = 0.0
+                tardy = 0.0
+                std_lateness = 0.0
+
+                if units > 0:
+                    gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
+                    sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
+                    lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
+                    std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
+
+                results_DEBUG[results_index]["WL entry"] += (sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG))
+                results_DEBUG[results_index]["WL released"] += (sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
+                results_DEBUG[results_index]["WL processed"] += (sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
+                results_DEBUG[results_index]["Jobs processed"] += (units)
+                results_DEBUG[results_index]["GTT"] += gtt
+                results_DEBUG[results_index]["SFT"] += sft
+                results_DEBUG[results_index]["Tardiness"] += tardiness
+                results_DEBUG[results_index]["Lateness"] += lateness
+                results_DEBUG[results_index]["Tardy"] += tardy
+                results_DEBUG[results_index]["STDLateness"] += std_lateness
                 # Queues information
                 results_DEBUG[results_index]["PSP Shop Load"]+=(sum(sum(job.ProcessingTime) for job in system.PSP))
                 sl = get_shop_load(system.Pools)
