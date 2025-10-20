@@ -74,8 +74,8 @@ JOBS_SIGMA = math.sqrt(np.log(((JOBS_MEAN * JOBS_MEAN) + JOBS_VARIANCE)/(JOBS_ME
 
 INPUT_RATE = 0                              # keep equal to 0 
 
-TARGET_UTILIZATION = 0.9375
-
+#TARGET_UTILIZATION = 0.9375
+TARGET_UTILIZATION = 0.89
 UNIFIED_RESULTS = []
 
 
@@ -122,7 +122,7 @@ DISRUPTION_LEVELS = {
 HUMAN_VARIABILITY_LEVELS = [1, 
                             #1.025, 
                             #1.05, 
-                            1.07
+                            1.075
                             ]
 
 
@@ -431,7 +431,7 @@ for config in PAR2:
 
         
 
-        INPUT_RATE = (480*N_PHASES*TARGET_UTILIZATION) / (JOBS_MEAN*(JOBS_ROUTINGS_AVG_MACHINES))/480
+        INPUT_RATE = (480*N_PHASES*TARGET_UTILIZATION)/ (JOBS_MEAN*(JOBS_ROUTINGS_AVG_MACHINES))/480
 
         
 
@@ -451,7 +451,7 @@ for config in PAR2:
 
     if (SHOP_FLOW=="directed" and SHOP_LENGTH=="variable"):
 
-        DUE_DATE_MAX = 3600
+        DUE_DATE_MAX = 3000
 
     elif (SHOP_FLOW=="directed" and SHOP_LENGTH==5):
 
@@ -590,8 +590,7 @@ for config in PAR2:
 
 
 
-            DUE_DATE_MIN = 83.686*len(self.Routing)
-
+            DUE_DATE_MIN = 83.686*len(self.Routing)*HUMAN_RATIO
             
 
             self.DueDate = self.ArrivalDate + np.random.uniform(DUE_DATE_MIN,DUE_DATE_MAX)
@@ -1275,7 +1274,7 @@ for config in PAR2:
             """
             def evaluateJobStage1(self, job, machine_phases_load, human_phases_load):
                 """Stage 1: Check human workload constraints for collaborative jobs"""
-                job_machine_load, job_human_load = job.get_CAW_with_ratios_routing_only()
+                job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 for station_id in job.Routing:
                     if (machine_phases_load[station_id] + job_machine_load[station_id] > (workload_norm)/N_PHASES):
@@ -1305,7 +1304,7 @@ for config in PAR2:
                 
             def evaluateJobStage2(self, job, machine_phases_load, human_phases_load):
                 """Stage 2: Check machine workload constraints for independent jobs (human loads fixed)"""
-                job_machine_load, job_human_load = job.get_CAW_with_ratios_routing_only()
+                job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 # Check machine load constraints for all stations in routing
                 for station_id in job.Routing:
@@ -1336,7 +1335,7 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
                 
-                all_jobs.sort(key=lambda x: x.DueDate)  # Changed from x.DueDate
+                all_jobs.sort(key=lambda x: x.ArrivalDate)  # Changed from x.DueDate
                 
                 # Separate collaborative and independent jobs while maintaining planned release order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1600,7 +1599,7 @@ for config in PAR2:
 
             def evaluateJobStage1_IM(self, job, machine_phases_load, human_phases_load):
                 """Stage 1 for immediate mode"""
-                job_machine_load, job_human_load = job.get_CAW_with_ratios_routing_only()
+                job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 job.ReleaseDate = self.env.now
                 for station_id in job.Routing:
@@ -1617,7 +1616,7 @@ for config in PAR2:
 
             def evaluateJobStage1_Normal(self, job, machine_phases_load, human_phases_load):
                 """Stage 1 for directed flow with absenteeism affecting both WLN AND processing times"""
-                job_machine_load, job_human_load = job.get_CAW_with_ratios_routing_only()
+                job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 base_station_wln = workload_norm / N_PHASES
                 
@@ -1660,7 +1659,7 @@ for config in PAR2:
 
             def evaluateJobStage2_IM(self, job, machine_phases_load, human_phases_load):
                 """Stage 2 for immediate mode"""
-                job_machine_load, job_human_load = job.get_CAW_with_ratios_routing_only()
+                job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 job.ReleaseDate = self.env.now
                 for station_id in job.Routing:
@@ -1676,7 +1675,7 @@ for config in PAR2:
 
             def evaluateJobStage2_Normal(self, job, machine_phases_load, human_phases_load):
                 """Stage 2 for directed flow with machine constraints only"""
-                job_machine_load, job_human_load = job.get_CAW_with_ratios_routing_only()
+                job_machine_load, job_human_load = job.get_CSL_with_ratios_routing_only()
                 
                 base_station_wln = workload_norm / N_PHASES
                 
@@ -1720,7 +1719,7 @@ for config in PAR2:
                         self.system.release_trigger = self.env.event()
                     
                     # PROCESS JOBS - DIRECTED FLOW: Use corrected shop load
-                    machine_phases_load, human_phases_load = get_corrected_aggregated_workload_with_ratios(self.Pools)
+                    machine_phases_load, human_phases_load = get_corrected_shop_load_with_ratios(self.Pools)
                     
                     
                     # Sort by arrival date for directed flow
