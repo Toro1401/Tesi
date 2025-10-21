@@ -6,11 +6,11 @@ from simpy.events import AnyOf, AllOf, Event
 
 import csv
 
-import pulp
+#import pulp
 
 import math
 
-import gurobipy
+#import gurobipy
 
 import time
 
@@ -74,8 +74,8 @@ JOBS_SIGMA = math.sqrt(np.log(((JOBS_MEAN * JOBS_MEAN) + JOBS_VARIANCE)/(JOBS_ME
 
 INPUT_RATE = 0                              # keep equal to 0 
 
-#TARGET_UTILIZATION = 0.9375
-TARGET_UTILIZATION = 0.89
+TARGET_UTILIZATION = 0.9375
+#TARGET_UTILIZATION = 0.89
 UNIFIED_RESULTS = []
 
 
@@ -120,8 +120,8 @@ DISRUPTION_LEVELS = {
 }
 
 HUMAN_VARIABILITY_LEVELS = [1, 
-                            #1.025, 
-                            #1.05, 
+                            1.025, 
+                            1.05, 
                             1.075
                             ]
 
@@ -168,7 +168,7 @@ for config in PAR2:
             WORKLOAD_NORMS = [1900, 2100,2300, 2500,2700, 0]
         elif SHOP_FLOW=="directed" and SHOP_LENGTH=="variable":
             #WORKLOAD_NORMS = [1400,1500,1600, 1800,2000, 0]
-            WORKLOAD_NORMS = [1600,1700,1800,2000,2100, 0]
+            WORKLOAD_NORMS = [1600,1700,1800,1900,2000,2100]
             #WORKLOAD_NORMS = [0]
         elif SHOP_FLOW=="undirected" and SHOP_LENGTH==5:
             WORKLOAD_NORMS = [6900,7100,7300,7500,7700,0]           
@@ -431,7 +431,7 @@ for config in PAR2:
 
         
 
-        INPUT_RATE = (480*N_PHASES*TARGET_UTILIZATION)/ (JOBS_MEAN*(JOBS_ROUTINGS_AVG_MACHINES))/480
+        INPUT_RATE = (480*N_PHASES*TARGET_UTILIZATION)/(JOBS_MEAN*(JOBS_ROUTINGS_AVG_MACHINES))/480
 
         
 
@@ -451,7 +451,7 @@ for config in PAR2:
 
     if (SHOP_FLOW=="directed" and SHOP_LENGTH=="variable"):
 
-        DUE_DATE_MAX = 3000
+        DUE_DATE_MAX = 4000
 
     elif (SHOP_FLOW=="directed" and SHOP_LENGTH==5):
 
@@ -1335,7 +1335,7 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
                 
-                all_jobs.sort(key=lambda x: x.ArrivalDate)  # Changed from x.DueDate
+                all_jobs.sort(key=lambda x: x.ArrivalDate)
                 
                 # Separate collaborative and independent jobs while maintaining planned release order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1429,7 +1429,7 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
                 
-                all_jobs.sort(key=lambda x: x.DueDate)  # Changed from x.DueDate
+                all_jobs.sort(key=lambda x: x.ArrivalDate)
                 
                 # Separate collaborative and independent jobs while maintaining planned release order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1562,7 +1562,7 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
                 
-                all_jobs.sort(key=lambda x: x.DueDate)
+                all_jobs.sort(key=lambda x: x.ArrivalDate)
                 
                 # Separate collaborative and independent jobs
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1727,7 +1727,7 @@ for config in PAR2:
                     for i in range(len(self.PoolUpstream)):
                         all_jobs.append(self.PoolUpstream.get(0))
                     
-                    all_jobs.sort(key=lambda x: x.DueDate)
+                    all_jobs.sort(key=lambda x: x.ArrivalDate)
                     
                     # Separate collaborative and independent jobs
                     collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1830,7 +1830,7 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     jobs_to_evaluate.append(self.PoolUpstream.get(0))
                 
-                jobs_to_evaluate.sort(key=lambda x: x.DueDate)
+                jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
                 
                 # Choose evaluation function based on mode
                 if workload_norm==0:
@@ -1932,7 +1932,7 @@ for config in PAR2:
                     for i in range(len(self.PoolUpstream)):
                         jobs_to_evaluate.append(self.PoolUpstream.get(0))
                     
-                    jobs_to_evaluate.sort(key=lambda x: x.DueDate)
+                    jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
                     
                     # Choose evaluation function
                     if workload_norm == 0:
