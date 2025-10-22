@@ -78,6 +78,8 @@ TARGET_UTILIZATION = 0.9375
 #TARGET_UTILIZATION = 0.89
 UNIFIED_RESULTS = []
 
+DISPATCH_RULE = 'EDD'  # Can be 'FIFO' or 'EDD'
+
 
 
 # JOBS RELEASE PARAMETERS
@@ -1334,9 +1336,11 @@ for config in PAR2:
                 all_jobs = []
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
-                
-                all_jobs.sort(key=lambda x: x.ArrivalDate)
-                
+
+                if DISPATCH_RULE == 'FIFO': all_jobs.sort(key=lambda x: x.ArrivalDate)
+                elif DISPATCH_RULE == 'EDD': all_jobs.sort(key=lambda x: x.DueDate)
+                else: all_jobs.sort(key=lambda x: x.ArrivalDate)
+
                 # Separate collaborative and independent jobs while maintaining planned release order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
                 independent_jobs = [job for job in all_jobs if not job.is_collaborative()]
@@ -1429,7 +1433,9 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
                 
-                all_jobs.sort(key=lambda x: x.ArrivalDate)
+                if DISPATCH_RULE == 'FIFO': all_jobs.sort(key=lambda x: x.ArrivalDate)
+                elif DISPATCH_RULE == 'EDD': all_jobs.sort(key=lambda x: x.DueDate)
+                else: all_jobs.sort(key=lambda x: x.ArrivalDate)
                 
                 # Separate collaborative and independent jobs while maintaining planned release order
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1562,7 +1568,9 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     all_jobs.append(self.PoolUpstream.get(0))
                 
-                all_jobs.sort(key=lambda x: x.ArrivalDate)
+                if DISPATCH_RULE == 'FIFO': all_jobs.sort(key=lambda x: x.ArrivalDate)
+                elif DISPATCH_RULE == 'EDD': all_jobs.sort(key=lambda x: x.DueDate)
+                else: all_jobs.sort(key=lambda x: x.ArrivalDate)
                 
                 # Separate collaborative and independent jobs
                 collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1727,7 +1735,9 @@ for config in PAR2:
                     for i in range(len(self.PoolUpstream)):
                         all_jobs.append(self.PoolUpstream.get(0))
                     
-                    all_jobs.sort(key=lambda x: x.ArrivalDate)
+                    if DISPATCH_RULE == 'FIFO': all_jobs.sort(key=lambda x: x.ArrivalDate)
+                    elif DISPATCH_RULE == 'EDD': all_jobs.sort(key=lambda x: x.DueDate)
+                    else: all_jobs.sort(key=lambda x: x.ArrivalDate)
                     
                     # Separate collaborative and independent jobs
                     collaborative_jobs = [job for job in all_jobs if job.is_collaborative()]
@@ -1830,7 +1840,9 @@ for config in PAR2:
                 for i in range(len(self.PoolUpstream)):
                     jobs_to_evaluate.append(self.PoolUpstream.get(0))
                 
-                jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
+                if DISPATCH_RULE == 'FIFO': jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
+                elif DISPATCH_RULE == 'EDD': jobs_to_evaluate.sort(key=lambda x: x.DueDate)
+                else: jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
                 
                 # Choose evaluation function based on mode
                 if workload_norm==0:
@@ -1932,7 +1944,9 @@ for config in PAR2:
                     for i in range(len(self.PoolUpstream)):
                         jobs_to_evaluate.append(self.PoolUpstream.get(0))
                     
-                    jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
+                    if DISPATCH_RULE == 'FIFO': jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
+                    elif DISPATCH_RULE == 'EDD': jobs_to_evaluate.sort(key=lambda x: x.DueDate)
+                    else: jobs_to_evaluate.sort(key=lambda x: x.ArrivalDate)
                     
                     # Choose evaluation function
                     if workload_norm == 0:
@@ -2084,8 +2098,9 @@ for config in PAR2:
         def sort(self):
 
             
-
-            self.array.sort(key=lambda x: x.ArrivalDate)
+            if DISPATCH_RULE == 'FIFO': self.array.sort(key=lambda x: x.ArrivalDate)
+            elif DISPATCH_RULE == 'EDD': self.array.sort(key=lambda x: x.DueDate)
+            else: self.array.sort(key=lambda x: x.ArrivalDate)
 
     class Machine(object):
 
@@ -3876,52 +3891,37 @@ for config in PAR2:
 
                 
 
-                units = -1
-
-                if len(JOBS_DELIVERED_DEBUG)>0:
-
-                    
-
-                    units=len(JOBS_DELIVERED_DEBUG)  
-
+                units = 0
+                if len(JOBS_DELIVERED_DEBUG) > 0:
+                    units = len(JOBS_DELIVERED_DEBUG)
                 
-
+                gtt = 0.0
+                sft = 0.0
+                tardiness = 0.0
+                lateness = 0.0
+                tardy = 0.0
+                std_lateness = 0.0
                 
-
-                
+                if units > 0:
+                    gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
+                    sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
+                    lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
+                    std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
 
                 result = {
-
-                    
-
-                    "time":(env.now-TIME_BTW_DEBUGS),
-
-                    
-
-                    "WL entry":(sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG)),
-
-                    "WL released":(sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG)),
-
-                    "WL processed":(sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG)),
-
-                    "Jobs processed":units,
-
-                    "GTT":(sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG)/units),
-
-                    "SFT":(sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG)/units),
-
-                    "Tardiness":(sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG)/units),
-
-                    "Lateness":(sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)/units),
-
-                    "Tardy":(sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG)/float(units)),
-
-                    "STDLateness":(np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))),
-
-                    
-
-
-
+                    "time": (env.now - TIME_BTW_DEBUGS),
+                    "WL entry": (sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG)),
+                    "WL released": (sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG)),
+                    "WL processed": (sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG)),
+                    "Jobs processed": units,
+                    "GTT": gtt,
+                    "SFT": sft,
+                    "Tardiness": tardiness,
+                    "Lateness": lateness,
+                    "Tardy": tardy,
+                    "STDLateness": std_lateness,
                 }
 
                 
@@ -4037,45 +4037,35 @@ for config in PAR2:
             
 
             else:
+                units = 0
+                if len(JOBS_DELIVERED_DEBUG) > 0:
+                    units = len(JOBS_DELIVERED_DEBUG)
 
-                
+                gtt = 0.0
+                sft = 0.0
+                tardiness = 0.0
+                lateness = 0.0
+                tardy = 0.0
+                std_lateness = 0.0
 
-                units = -1
+                if units > 0:
+                    gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
+                    sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
+                    lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
+                    tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
+                    std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
 
-                if len(JOBS_DELIVERED_DEBUG)>0:
-
-                    
-
-                    units=len(JOBS_DELIVERED_DEBUG)  
-
-                
-
-                results_DEBUG[results_index]["WL entry"]+=(sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG))
-
-                results_DEBUG[results_index]["WL released"]+=(sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
-
-                results_DEBUG[results_index]["WL processed"]+=(sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
-
-                results_DEBUG[results_index]["Jobs processed"]+=(units)
-
-                results_DEBUG[results_index]["GTT"]+=(sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG)/units)
-
-                results_DEBUG[results_index]["SFT"]+=(sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG)/units)
-
-                results_DEBUG[results_index]["Tardiness"]+=(sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG)/units)
-
-                results_DEBUG[results_index]["Lateness"]+=(sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)/units)
-
-                results_DEBUG[results_index]["Tardy"]+=(sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG)/float(units))
-
-                results_DEBUG[results_index]["STDLateness"]+=(np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG))))
-
-                
-
-                
-
-                
-
+                results_DEBUG[results_index]["WL entry"] += (sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG))
+                results_DEBUG[results_index]["WL released"] += (sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
+                results_DEBUG[results_index]["WL processed"] += (sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
+                results_DEBUG[results_index]["Jobs processed"] += (units)
+                results_DEBUG[results_index]["GTT"] += gtt
+                results_DEBUG[results_index]["SFT"] += sft
+                results_DEBUG[results_index]["Tardiness"] += tardiness
+                results_DEBUG[results_index]["Lateness"] += lateness
+                results_DEBUG[results_index]["Tardy"] += tardy
+                results_DEBUG[results_index]["STDLateness"] += std_lateness
                 # Queues information
 
                 results_DEBUG[results_index]["PSP Shop Load"]+=(sum(sum(job.ProcessingTime) for job in system.PSP))
