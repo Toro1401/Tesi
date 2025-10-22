@@ -22,15 +22,11 @@ from collections import defaultdict
 
 import pandas as pd
 
-
-
 # ORR PARAMETERS
 
 RELEASE_RULE="HUMAN_CENTRIC"                           # can be IM, PR, WL, WL_MOD, WB, WB_MOD,WL_DIRECT,HUMAN_CENTRIC
 
 STARVATION_AVOIDANCE = False                 # can be True or False 
-
-
 
 # WORKERS PARAMETERS                        # flexible/output control works only with AL_MOD
 
@@ -46,17 +42,11 @@ TRANSFER_TIME = 0
 
 PERMANENCE_TIME = 0
 
-
-
 # SHOP PARAMETERS
 
 SHOP_FLOW = "directed"                    # directed or undirected
 
 SHOP_LENGTH = "variable"                    # a number or "variable"
-
-
-
-
 
 # JOBS PARAMETERS
 
@@ -68,8 +58,6 @@ JOBS_MU = np.log((JOBS_MEAN * JOBS_MEAN)/math.sqrt((JOBS_MEAN * JOBS_MEAN) + JOB
 
 JOBS_SIGMA = math.sqrt(np.log(((JOBS_MEAN * JOBS_MEAN) + JOBS_VARIANCE)/(JOBS_MEAN * JOBS_MEAN)))
 
-
-
 # JOBS GENERATOR PARAMETERS
 
 INPUT_RATE = 0                              # keep equal to 0 
@@ -80,17 +68,9 @@ UNIFIED_RESULTS = []
 
 DISPATCH_RULE = 'EDD'  # Can be 'FIFO' or 'EDD'
 
-
-
 # JOBS RELEASE PARAMETERS
 
-
 ABSENTEEISM_LEVEL = 0.0  # Will be set by parameter sweep
-
-
-
-
-
 
 ###########################################
 
@@ -103,7 +83,6 @@ PAR1=[
     ["HUMAN_CENTRIC","static", False],
 
     ["WL_DIRECT","static", False],
-
 
     ]
 
@@ -126,7 +105,6 @@ HUMAN_VARIABILITY_LEVELS = [1,
                             1.05, 
                             1.075
                             ]
-
 
 # Modify your main parameter loop
 PAR2 = []
@@ -156,16 +134,12 @@ for config in PAR2:
                                     "daily"
                                     ]
 
-
     if   RELEASE_RULE=="PR" or RELEASE_RULE=="IM":
-
-        
 
         WORKLOAD_NORMS=[0]
   
     else:
 
-        
         if SHOP_FLOW=="directed" and SHOP_LENGTH==5:
             WORKLOAD_NORMS = [1900, 2100,2300, 2500,2700, 0]
         elif SHOP_FLOW=="directed" and SHOP_LENGTH=="variable":
@@ -177,10 +151,6 @@ for config in PAR2:
         elif SHOP_FLOW=="undirected" and SHOP_LENGTH=="variable":
             WORKLOAD_NORMS = [1450,1500,1600,1900,2000, 0]
             
-                            
-
-                            
-
         # HUMAN-MACHINE WORKSTATION CONFIGURATION
     
     HUMAN_MACHINE_PHASES = {
@@ -194,12 +164,9 @@ for config in PAR2:
     # RATIOS FOR HUMAN-MACHINE COLLABORATION
     MACHINE_RATIO = 1  # Adjust as needed
       
-
     N_WORKERS = 5
 
     N_PHASES = 5                # Machines/Workers
-
-
 
     # SIMULATOR PARAMETERS
 
@@ -211,27 +178,19 @@ for config in PAR2:
 
     WARMUP = 200000
 
-                               
-
     # average number of stations per configuration 
 
     # "undirected-variable" -> 4.015384615384615
 
     # "directed-variable" ->   2.5806451612903225
 
-
-
     SCREEN_DEBUG = True
 
     TIME_BTW_SCREEN_DEBUGS = 480*500         # expressed in simulation time units
 
-
-
     CSV_OUTPUT_JOBS = True
 
     CSV_OUTPUT_SYSTEM = True
-
-
 
     RUN_DEBUG = True                       # used to compute the warmup period 
 
@@ -249,21 +208,13 @@ for config in PAR2:
 
     # </>
 
-
-
     TIME_BTW_DEBUGS = 480*1
 
     MAX_COLS = 130
 
-
-
     start = time.time()
 
-
-
     JOBS_WARMUP = 0
-
-
 
     JOBS_ROUTINGS_AVG_MACHINES=0
 
@@ -292,93 +243,47 @@ for config in PAR2:
 
         #temp=SHOP_CONFIGURATION.split("%20")
 
-        
-
         global SHOP_FLOW
 
         global SHOP_LENGTH
 
-        
-
         configurations=list()
-
-
 
         if(SHOP_LENGTH == "variable"):  
 
-
-
             for rr in range(1,N_PHASES+1):
-
-
 
                 for i in permutations([j for j in range(N_PHASES)],r=rr):
 
-            
-
                     configurations.append(i)
-
-
 
         else:
 
-            
-
             configurations=list(permutations([i for i in range(N_PHASES)], r=int(SHOP_LENGTH)))
-
-
-
-
-
-            
 
         if(SHOP_FLOW == "directed" ):
 
-
-
             def is_directed(configuration):
-
-            
 
                 for i in range(0,len(configuration)-1):
 
-                
-
                     if(configuration[i] > configuration[i+1]):
-
-                        
 
                         return False
 
-                    
-
                 return True
-
-            
-
-            
 
             i=0
 
             while(i<len(configurations)):
 
-                
-
                 if(not is_directed(configurations[i])):
-
-                    
 
                     del(configurations[i])
 
-                    
-
                 else:
 
-                    
-
                     i+=1
-
-        
 
         global TARGET_UTILIZATION
 
@@ -388,25 +293,15 @@ for config in PAR2:
 
         global JOBS_ROUTINGS_AVG_MACHINES
 
-        
-
         JOBS_ROUTINGS_AVG_MACHINES = (sum(len(configuration) for configuration in configurations)/len(configurations))
 
-        
-
         INPUT_RATE = (480*N_PHASES*TARGET_UTILIZATION) / (JOBS_MEAN*(JOBS_ROUTINGS_AVG_MACHINES))/480
-
-        
 
         print("INPUT RATE", INPUT_RATE)
 
         print(INPUT_RATE*480, "jobs per day")
 
-        
-
         time.sleep(2)
-
-        
 
         return configurations
 
@@ -420,53 +315,29 @@ for config in PAR2:
 
         global JOBS_ROUTINGS_AVG_MACHINES
 
-        
-
         if SHOP_LENGTH == 5:
-
-            
 
             JOBS_ROUTINGS_AVG_MACHINES=5
 
-            
-
         else:
-
-            
 
             if (SHOP_FLOW=="directed"):
 
-                
-
                 JOBS_ROUTINGS_AVG_MACHINES=2.5806451612903225
-
-            
 
             else: 
 
-                
-
                 JOBS_ROUTINGS_AVG_MACHINES=4.015384615384615
-
-        
 
         INPUT_RATE = (480*N_PHASES*TARGET_UTILIZATION)/(JOBS_MEAN*(JOBS_ROUTINGS_AVG_MACHINES))/480
 
-        
-
         print("INPUT RATE", INPUT_RATE)
 
-        
-
         print(INPUT_RATE*480, "jobs per day")
-
-        
 
         time.sleep(2)
 
     getShopConfigurations()
-
-     
 
     if (SHOP_FLOW=="directed" and SHOP_LENGTH=="variable"):
 
@@ -483,7 +354,6 @@ for config in PAR2:
     elif (SHOP_FLOW=="undirected" and SHOP_LENGTH=="variable"):
 
         DUE_DATE_MAX = 1500
-
 
 #####CLASES#####
 
@@ -513,8 +383,6 @@ for config in PAR2:
         ShopLoad (float): The total processing time for the job.
     """
 
-
-
         def __init__(self,env, id): #
             """Initializes a new Job object with random routing and processing times.
 
@@ -530,44 +398,23 @@ for config in PAR2:
             id (int): The unique identifier for the job.
         """
             
-
             #self.env = env
 
             global DUE_DATE_MIN
 
             global DUE_DATE_MAX
 
-            
-
-            
-
             self.id = id    
-
-            
 
             self.ArrivalDate = env.now 
 
-            
-
             self.ReleaseDate = None            
-
-            
 
             self.CompletationDate = None
 
-
-
-            self.ArrivalDateMachines = list(0 for i in range(N_PHASES))
-
-
-
-            self.CompletationDateMachines = list(0 for i in range(N_PHASES))
-
-
-
-            self.ArrivalDateQueue = list(0 for i in range(N_PHASES))
-
-
+            self.ArrivalDateMachines = [0] * N_PHASES
+            self.CompletationDateMachines = [0] * N_PHASES
+            self.ArrivalDateQueue = [0] * N_PHASES
 
             # Set ProcessingTime (i.e. time to spend at the stations known before the release) and 
 
@@ -575,111 +422,57 @@ for config in PAR2:
 
             # As soon as they are processed by stations, values are reduced or eventually set to 0 
 
-            
-
             #self.ProcessingTime = list(np.random.lognormal(JOBS_MU, JOBS_SIGMA)  for i in range(N_PHASES))
 
             #print(self.ProcessingTime)
 
-            
-
             n_machines=N_PHASES
-
-            
 
             if SHOP_LENGTH=="variable":
 
-                
-
                 n_machines=np.random.randint(low=1, high=N_PHASES)
-
-            
 
             self.Routing = list()
 
             while len(self.Routing)<n_machines:        
 
-                
-
                 x = np.random.randint(low=0, high=N_PHASES)
-
-                
 
                 if x not in self.Routing:
 
-                    
-
                     self.Routing.append(x)
-
-            
-
-            
 
             if SHOP_FLOW=="directed":
 
-                
-
                 self.Routing.sort()
-
-                
 
             #print (self.Routing)
 
-            
-
             #time.sleep(5)
-
-            
 
             #self.Routing = JOBS_ROUTINGS[np.random.randint(low=0, high=len(JOBS_ROUTINGS))]     
 
-
-
             DUE_DATE_MIN = 83.686*len(self.Routing)
             
-
             self.DueDate = self.ArrivalDate + np.random.uniform(DUE_DATE_MIN,DUE_DATE_MAX)
-
-
-
-
 
             self.ProcessingTime = list(0 for i in range(N_PHASES))   
 
-            
-
             for i in self.Routing:
-
-                
 
                 x = np.random.lognormal(JOBS_MU, JOBS_SIGMA)
 
-                
-
                 while x>250:
-
-                    
 
                     x = np.random.lognormal(JOBS_MU, JOBS_SIGMA)
 
-                    
-
                 self.ProcessingTime[i] = x
-
-            
 
             self.RemainingTime = list(self.ProcessingTime)
 
-
-            
-
             self.Position = 0
 
-            
-
             self.ShopLoad=sum(self.ProcessingTime)
-
-            
 
             self.__GTT__= None
 
@@ -691,8 +484,6 @@ for config in PAR2:
 
             self.__lateness__=None
 
-            
-
             #print(self.Routing)
 
             #print(self.ProcessingTime)
@@ -701,7 +492,6 @@ for config in PAR2:
 
             #die()
 
-    
         def get_current_machine(self):
             """Gets the current machine for the job based on its routing position.
 
@@ -743,27 +533,15 @@ for config in PAR2:
 
             """ contribution to the corrected aggregated workload """
 
-            
-
             load = list(0 for i in range(N_PHASES))
-
-
 
             weight = 1        
 
-
-
             for i in range(self.Position, len(self.Routing)):
-
-                
 
                 load[self.Routing[i]] = self.RemainingTime[self.Routing[i]]/weight
 
-            
-
                 weight += 1        
-
-            
 
             #print()
 
@@ -775,11 +553,7 @@ for config in PAR2:
 
             #print(load)
 
-            
-
             #time.sleep(5)
-
-            
 
             return load
 
@@ -799,19 +573,11 @@ for config in PAR2:
 
             """ contribution to the corrected shop load """
 
-            
-
             load = list(0 for i in range(N_PHASES))
-
-            
 
             for i in range(N_PHASES):
 
-                
-
                 load[i]=self.ProcessingTime[i]/len(self.Routing)
-
-            
 
             return load
 
@@ -1054,15 +820,9 @@ for config in PAR2:
 
             """ total_delivery_time """
 
-            
-
             if self.__GTT__ == None:
 
-                
-
                 self.__GTT__ = self.CompletationDate - self.ArrivalDate
-
-            
 
             return self.__GTT__
 
@@ -1082,15 +842,9 @@ for config in PAR2:
 
             """total_manufacturing_lead_time"""
 
-            
-
             if self.__SFT__ == None:
 
-                
-
                 self.__SFT__= self.CompletationDate - self.ReleaseDate  
-
-            
 
             return self.__SFT__
 
@@ -1110,19 +864,11 @@ for config in PAR2:
 
             '''array with the SFT on each machine'''
 
-
-
             SFT_Machines = list(0 for i in range(N_PHASES))
-
-
 
             for i in range(N_PHASES):
 
-
-
                 SFT_Machines[i] = self.CompletationDateMachines[i] - self.ArrivalDateMachines[i]
-
-
 
             return SFT_Machines
 
@@ -1142,15 +888,9 @@ for config in PAR2:
 
             '''array with the SFT on each machine'''
 
-
-
             LT_Machines = list(0 for i in range(N_PHASES))
 
-
-
             for i in range(N_PHASES):
-
-
 
                 LT_Machines[i] = self.CompletationDateMachines[i] - self.ArrivalDateQueue[i]
 
@@ -1169,27 +909,15 @@ for config in PAR2:
             int: 1 if the job is tardy, 0 otherwise.
         """
 
-           
-
             if self.__tardy__ == None:
-
-
 
                 if self.DueDate < self.CompletationDate: 
 
-                    
-
                     self.__tardy__=  1
-
-                    
 
                 else:
 
-                    
-
                     self.__tardy__=  0  
-
-            
 
             return self.__tardy__
 
@@ -1207,15 +935,9 @@ for config in PAR2:
             float: The amount of time the job is late, or 0 if on-time.
         """
 
-            
-
             if self.__tardiness__ == None:
 
-                
-
                 self.__tardiness__= max(0, self.CompletationDate - self.DueDate)
-
-            
 
             return self.__tardiness__
 
@@ -1233,15 +955,9 @@ for config in PAR2:
             float: The difference between the completion date and the due date.
         """
 
-            
-
             if self.__lateness__ == None:
 
-                
-
                 self.__lateness__= self.CompletationDate-self.DueDate 
-
-            
 
             return self.__lateness__
 
@@ -1262,8 +978,6 @@ for config in PAR2:
         generated_orders (int): A counter for the number of jobs generated.
     """
 
-
-
         def __init__(self, env, PoolDownstream):
             """Initializes the Jobs_generator.
 
@@ -1277,31 +991,19 @@ for config in PAR2:
             PoolDownstream (Pool): The pool to which new jobs will be added.
         """
 
-
-
             self.env = env
-
-            
 
             self.PoolDownstream = PoolDownstream
 
-            
-
             self.input_rate = INPUT_RATE
-
-
 
             self.generated_orders = 0             
 
             #self.generated_processing_time = list(0 for i in range(N_PHASES))
 
-            
-
             # external references
 
             #self.PoolDownstream = PoolDownstream
-
-            
 
             #self.env.process(self._periodic_generator(480))
 
@@ -1311,37 +1013,21 @@ for config in PAR2:
 
         def _periodic_generator(self, period):
 
-            
-
             while True:
-
-            
 
                 for i in range(0, np.random.poisson(self.input_rate * period)):
 
-                    
-
                     self.PoolDownstream.append(Job(self.env, self.generated_orders))
-
-                    
-
-                
 
                 # <if run debug>    
 
                 global JOBS_ENTRY_DEBUG
 
-                    
-
                 JOBS_ENTRY_DEBUG.append(job)
 
                 # </>
 
-                
-
                 self.generated_orders += 1
-
-            
 
                 yield env.timeout(period)
 
@@ -1365,27 +1051,15 @@ for config in PAR2:
                                   next job arrival.
         """
 
-            
-
             while True:
-
-                
 
                 job = Job(self.env, self.generated_orders + 1)
 
-                
-
                 self.PoolDownstream.append(job)
-
-                
 
                 #for i in range(N_PHASES):
 
-                    
-
                 #    self.generated_processing_time[i] += job.ProcessingTime[i]
-
-                
 
                 # <if run debug>
 
@@ -1393,19 +1067,11 @@ for config in PAR2:
 
                     global JOBS_ENTRY_DEBUG                
 
-                    
-
                     JOBS_ENTRY_DEBUG.append(job)
 
                 # </>
 
-                
-
-                
-
                 self.generated_orders += 1
-
-                
 
                 yield env.timeout(np.random.exponential(1/self.input_rate))        
 
@@ -1555,8 +1221,6 @@ for config in PAR2:
         absenteeism_manager (DailyPlanningAbsenteeismManager): A manager for worker absenteeism.
     """
 
-
-
         def __init__(self, env, rule, system, workload_norm =- 1):
             """Initializes the Orders_release mechanism.
 
@@ -1581,8 +1245,6 @@ for config in PAR2:
             self.system.release_trigger = self.env.event()
             self.absenteeism_manager = system.absenteeism_manager
 
-                
-
             if rule == "IM":      # immediate release
                 self.env.process(self.Immediate_release())
 
@@ -1597,14 +1259,9 @@ for config in PAR2:
                 elif SHOP_FLOW == "directed":
                     self.env.process(self.WL_Direct_release_directed_with_IM(480, workload_norm))
 
-
             else:
 
-                
-
                 print("Release algorithm not recognised in Orders_release")
-
-                
 
                 exit()
 
@@ -1642,37 +1299,21 @@ for config in PAR2:
             simpy.events.Event: An event that is triggered when new jobs are available.
         """
 
-            
-
             while True:
-
-
 
                 while len(self.PoolUpstream) > 0:
 
-                    
-
                     job = self.PoolUpstream.get()
-
-                
 
                     job.ReleaseDate = self.env.now
 
-                    
-
                     self.Pools[job.Routing[0]].append(job)
-
-                        
 
                 # generate the event that trigger the next release
 
                 waiting_new_jobs_event = self.env.event()
 
-                
-
                 self.PoolUpstream.waiting_new_jobs.append(waiting_new_jobs_event)
-
-                
 
                 yield waiting_new_jobs_event
 
@@ -2200,7 +1841,6 @@ for config in PAR2:
                     # PROCESS JOBS - DIRECTED FLOW: Use corrected shop load
                     machine_phases_load, human_phases_load = get_corrected_shop_load_with_ratios(self.Pools)
                     
-                    
                     # Sort by arrival date for directed flow
                     all_jobs = []
                     for i in range(len(self.PoolUpstream)):
@@ -2483,7 +2123,6 @@ for config in PAR2:
                                         limits are exceeded.
     """
 
-
         def __init__(self, env, id, Pools):
             """Initializes a new Pool object.
 
@@ -2493,29 +2132,17 @@ for config in PAR2:
             Pools (list): A reference to the list of all pools in the system.
         """
 
-            
-
             self.env = env
-
-            
 
             self.Pools=Pools
 
-            
-
             self.id = id
 
-            
-
             self.array = list()  #list of jobs
-
-            
 
             # self.waiting_new_jobs is an external trigger (used in Machine::Machine_loop() and Worker::_ReactiveWorker) to notify the availability of new jobs
 
             self.waiting_new_jobs = list()
-
-            
 
             # self.workload_limit_triggers is an external trigger (used in Worker::_Flexible_loop()) to notify whether the lower workload limit has been reached
 
@@ -2533,8 +2160,6 @@ for config in PAR2:
 
             # Used to implement "Pool[x]"
 
-            
-
             return self.array[key]
 
         def __len__(self):
@@ -2548,8 +2173,6 @@ for config in PAR2:
         """
 
             # Used to implement "len(Pool)"
-
-            
 
             return len(self.array)        
 
@@ -2565,51 +2188,29 @@ for config in PAR2:
             job (Job): The job to be added to the pool.
         """
 
-                
-
             self.array.append(job)
-
-            
 
             # trigger starving machines and workers
 
             while len(self.waiting_new_jobs) > 0:
 
-                
-
                 self.waiting_new_jobs[0].succeed()
 
-
-
                 del(self.waiting_new_jobs[0])
-
-            
 
             # trigger workes whether the workload limit has been exceeded
 
             i = 0
 
-
-
             while i < len(self.workload_limit_triggers):
-
-                
 
                 if (get_corrected_aggregated_workload(self.Pools)[self.id] > self.workload_limit_triggers[i][1]):
 
-                        
-
                     self.workload_limit_triggers[i][2].succeed()
-
-                    
 
                     del(self.workload_limit_triggers[i])
 
-
-
                 else:
-
-                    
 
                     i += 1
 
@@ -2634,15 +2235,9 @@ for config in PAR2:
 
             """
 
-                
-
             temp = self.array[index]
 
-
-
             del(self.array[index])
-
-     
 
             return temp
 
@@ -2659,8 +2254,6 @@ for config in PAR2:
             list: The list of `Job` objects in the pool.
         """
 
-            
-
             return self.array            
 
         def delete(self,index):
@@ -2669,8 +2262,6 @@ for config in PAR2:
         Args:
             index (int): The index of the job to be deleted.
         """
-
-
 
             del(self.array[index])
 
@@ -2682,7 +2273,6 @@ for config in PAR2:
         arrival date, or 'EDD' (Earliest Due Date).
         """
 
-            
             if DISPATCH_RULE == 'FIFO': self.array.sort(key=lambda x: x.ArrivalDate)
             elif DISPATCH_RULE == 'EDD': self.array.sort(key=lambda x: x.DueDate)
             else: self.array.sort(key=lambda x: x.ArrivalDate)
@@ -2711,7 +2301,6 @@ for config in PAR2:
         Jobs_delivered (Pool): The pool for completed jobs.
     """
 
-    
         def __init__(self, env, id, PoolUpstream, Jobs_delivered, Pools, PSP, 
                     has_worker=False, processing_mode='machine_centric',
                     absenteeism_manager=None, downtime_manager=None):
@@ -3028,8 +2617,6 @@ for config in PAR2:
         WorkingTime (list): A list of the total time the worker has spent at each machine.
     """
 
-        
-
         def __init__(self, env, id, Pools, Machines,Default_machine, skills = None):
             """Initializes a new Worker object.
 
@@ -3047,178 +2634,92 @@ for config in PAR2:
             skills (list, optional): A predefined list of skills. Defaults to None.
         """
 
-            
-
             self.env = env
-
-            
 
             self.skillperphase = list()
 
-            
-
             self.id = id
-
-
 
             self.current_machine_id = -1
 
             # None raises error while printing 
 
-            
-
             self.Default_machine=Default_machine
-
-
 
             # self.relocation --> vector to count the # of times a relocation happens
 
-            self.relocation = list(0 for i in range(N_PHASES))
-
-
+            self.relocation = [0] * N_PHASES
 
             if WORKER_FLEXIBILITY == 'triangular':
 
-                
-
                 self._SetTriangularSkills(WORKER_EFFICIENCY_DECREMENT)
 
-
-
                 print("Vector of flexibility for worker %d: " %self.id +str(self.skillperphase))
-
-                
 
             elif WORKER_FLEXIBILITY == 'chain':
 
-                
-
                 self._SetChainSkills()
 
-
-
                 print("Vector of flexibility for worker %d: " %self.id +str(self.skillperphase))
-
-
 
             elif WORKER_FLEXIBILITY == 'chain upstream':
 
-
-
-                self._SetChainUpstreamSkills()
-
-
+                self._SetChainSkills(upstream=True)
 
                 print("Vector of flexibility for worker %d: " %self.id +str(self.skillperphase))
-
-                
 
             elif WORKER_FLEXIBILITY == 'flat':
 
-                
-
                 self._SetPlainSkills()
-
-
 
                 print("Vector of flexibility for worker %d: " %self.id +str(self.skillperphase))
 
-                
-
             else:
-
-                
 
                 exit("wrong worker flexibility ")
 
-                
-
-                
-
-            
-
             self.waiting_events = None
-
-
 
             #self.WorkloadProcessed = list(0 for i in range(N_PHASES))
 
             self.WorkingTime = list(0 for i in range(N_PHASES))
 
-            
-
             # capacity adjstment for the current period
 
             self.Capacity_adjustment = list(0 for i in range(N_PHASES)) 
 
-            
-
-            
-
             if 'WORKER_MODE' not in globals():
-
-                
 
                 exit("Worker mode not initialised")            
 
-                
-
             if WORKER_MODE == 'static':
-
-                
 
                 self._StaticicWorker(Machines)												# Fix to the machine
 
-            
-
             elif WORKER_MODE == 'reactive':
 
-                
-
                 self.process = self.env.process(self._ReactiveWorker(Machines,None))
-
-                
-
-
-
-            
 
             elif WORKER_MODE == 'flexible':
 
                 # output control
 
-                
-
                     self.process = self.env.process(self._Flexible_loop(Machines,None))
 
-
-
             else:
-
-                
 
                 exit("Worker mode not recognised")  
 
         def _SetMonoSkill(self):
             """Sets a single skill for the worker at their default machine."""
 
-
-
             for i in range(0,N_PHASES):
-
-                
 
                 if i == self.Default_machine:
 
-
-
                     self.skillperphase.append(1)
 
-
-
                 else:
-
-
 
                     self.skillperphase.append(0)
 
@@ -3236,58 +2737,7 @@ for config in PAR2:
             decrement (float): The amount by which the skill level decreases for
                                each step away from the default machine.
         """
-
-            
-
-            temp=list()
-
-            
-
-            for i in range(3):  # 0, 1 , 2 
-
-                
-
-                for i in range(N_PHASES):
-
-                    
-
-                    temp.append(0)
-
-                    
-
-            #for i in range(len(temp)):  # 0,1,2,3,4,    5,6,7,8,9,    10,11,12,13,14        
-
-                
-
-            #    temp[i] = max(1 - abs(self.Default_machine + N_PHASES - i) * decrement, 0)
-
-             
-
-            temp[self.Default_machine + N_PHASES] = 1 
-
-            temp[self.Default_machine + N_PHASES+1] = 1 - decrement
-
-            temp[self.Default_machine + N_PHASES-1] = 1 - decrement
-
-            
-
-            for i in range(N_PHASES):
-
-                
-
-                temp_sum = 0
-
-                
-
-                for j in range(3):
-
-                    
-
-                    temp_sum += temp[i+N_PHASES*j]
-
-                    
-
-                self.skillperphase.append(temp_sum)
+            self.skillperphase = [max(0, 1 - abs(i - self.Default_machine) * decrement) for i in range(N_PHASES)]
 
         def _SetExponentialSkills(self, decrement):
             """Sets an exponential skill profile for the worker.
@@ -3298,76 +2748,23 @@ for config in PAR2:
         Args:
             decrement (float): The base of the exponential decay.
         """
+            self.skillperphase = [max(0, pow(decrement, abs(self.Default_machine - i))) for i in range(N_PHASES)]
 
-               
-
-            for i in range(0, N_PHASES):
-
-                
-
-                self.skillperphase.append(max(pow(decrement, abs(self.Default_machine - i)), 0))
-
-        def _SetChainSkills(self):
+        def _SetChainSkills(self, upstream=False):
             """Sets a chain-like skill profile for the worker.
-
-        The worker is skilled at their default machine and the next machine in the
-        sequence, allowing them to move along a production line.
+        The worker is skilled at their default machine and an adjacent machine,
+        allowing them to move along a production line.
+        Args:
+            upstream (bool): If True, the adjacent machine is upstream, otherwise downstream.
         """
-
-            
-
-            self.skillperphase = list(0 for i in range(N_PHASES))
-
-            
-
+            self.skillperphase = [0] * N_PHASES
             self.skillperphase[self.Default_machine] = 1
+            if upstream:
+                adjacent_machine = (self.Default_machine - 1 + N_PHASES) % N_PHASES
+            else:  # downstream
+                adjacent_machine = (self.Default_machine + 1) % N_PHASES
+            self.skillperphase[adjacent_machine] = 1 - WORKER_EFFICIENCY_DECREMENT
 
-            
-
-            if self.Default_machine == N_PHASES-1:
-
-                
-
-                self.skillperphase[0] = 1-WORKER_EFFICIENCY_DECREMENT
-
-            
-
-            else:
-
-                
-
-                self.skillperphase[self.Default_machine+1] = 1-WORKER_EFFICIENCY_DECREMENT
-
-        def _SetChainUpstreamSkills(self):
-            """Sets an upstream chain-like skill profile for the worker.
-
-        Similar to `_SetChainSkills`, but the worker is skilled at their default
-        machine and the previous machine, allowing them to move upstream.
-        """
-
-
-
-            self.skillperphase = list(0 for i in range(N_PHASES))
-
-
-
-            self.skillperphase[self.Default_machine] = 1
-
-
-
-            if self.Default_machine == N_PHASES - 1:
-
-
-
-                self.skillperphase[3] = 1 - WORKER_EFFICIENCY_DECREMENT
-
-
-
-            else:
-
-
-
-                self.skillperphase[self.Default_machine - 1] = 1 - WORKER_EFFICIENCY_DECREMENT
 
         def _SetPlainSkills(self):
             """Sets a flat skill profile, making the worker proficient at all machines.
@@ -3375,19 +2772,7 @@ for config in PAR2:
         The worker has a high skill level at all machines, with a slightly higher
         efficiency at their default machine. This represents a highly flexible workforce.
         """
-
-            
-
-            self.skillperphase=list()
-
-            for i in range(N_PHASES):
-
-                
-
-                self.skillperphase.append(1-WORKER_EFFICIENCY_DECREMENT)
-
-            
-
+            self.skillperphase = [1 - WORKER_EFFICIENCY_DECREMENT] * N_PHASES
             self.skillperphase[self.Default_machine] = 1
 
         def _StaticicWorker(self, Machines):
@@ -3406,23 +2791,13 @@ for config in PAR2:
 
             """  
 
-            
-
             self.current_machine_id = self.Default_machine
-
-            
 
             Machines[self.Default_machine].Workers.append(self)
 
-            
-
             Machines[self.Default_machine].process.interrupt()
 
-            
-
             if Machines[self.current_machine_id].waiting_new_workers.triggered == False:
-
-                
 
                 Machines[self.current_machine_id].waiting_new_workers.succeed()    
 
@@ -3452,21 +2827,13 @@ for config in PAR2:
 
             """  
 
-
-
             def _Next_machine1(self):
-
-                
 
                 # workers can be transferred to external station only if there is no work to process at home dep. 
 
                 if(len(Machines[self.Default_machine].PoolUpstream) > 0 ):
 
-                     
-
                      return self.Default_machine
-
-                
 
                 # 
 
@@ -3474,113 +2841,61 @@ for config in PAR2:
 
                 for i in range(N_PHASES):
 
-                    
-
                     if( i == self.Default_machine ): 
 
                         #Skip home department
 
-                        
-
                         continue 
-
-                    
 
                     if (self.skillperphase[i] > 0 and len(Machines[i].PoolUpstream) > 0):
 
-                        
-
                         possible_external_machines.append((i,self.skillperphase[i]))
-
-                
 
                 if len(possible_external_machines)>0:       
 
-                    
-
                     possible_external_machines.sort(key=lambda x: float(x[1]), reverse=True)
-
-                
 
                     return possible_external_machines[0][0]
 
-                
-
                 return self.Default_machine
 
-            
-
             while True:
-
-                
 
                 #define the next machine
 
                 next_machine = _Next_machine1(self)
 
-                
-
                 # Unload the worker from its current station
 
                 if self.current_machine_id != -1 and self.current_machine_id != next_machine:
 
-                    
-
                     for i in range(len(Machines[self.current_machine_id].Workers)):
-
-                    
 
                         if Machines[self.current_machine_id].Workers[i].id == self.id:
 
-                            
-
                             del(Machines[self.current_machine_id].Workers[i])
-
-
 
                             Machines[self.current_machine_id].process.interrupt()
 
-
-
                             break
-
-                
 
                 # Transfer to the next machine
 
-                
-
                 if self.current_machine_id != next_machine:
-
-                    
 
                     yield env.timeout(TRANSFER_TIME)
 
-                    
-
                     self.current_machine_id=next_machine
-
-
 
                     self.relocation[next_machine] += 1
 
-                    
-
                     Machines[self.current_machine_id].Workers.append(self)
-
-                    
 
                     Machines[self.current_machine_id].process.interrupt()
 
-                    
-
                     if Machines[self.current_machine_id].waiting_new_workers.triggered == False:
 
-                        
-
                         Machines[self.current_machine_id].waiting_new_workers.succeed()
-
-                    
 
                 waiting_events=list()
 
@@ -3588,23 +2903,15 @@ for config in PAR2:
 
                 # waiting_events.append(self.env.timeout(60))
 
-                
-
                 #if self.current_machine_id == self.Default_machine:
 
                 # wait the end of the current job
 
                 end_current_job=self.env.event()
 
-                    
-
                 Machines[self.current_machine_id].waiting_end_job.append(end_current_job)
 
-                    
-
                 waiting_events.append(end_current_job)
-
-                
 
                 """
 
@@ -3614,15 +2921,9 @@ for config in PAR2:
 
                     critical_workload_trigger=self.env.event()
 
-                    
-
                     Pools[self.Default_machine].workload_limit_triggers.append([self.id,beta,critical_workload_trigger])
 
-     
-
                     waiting_events.append(critical_workload_trigger)
-
-                
 
                 elif self.current_machine_id!=self.Default_machine and beta == None:
 
@@ -3632,19 +2933,11 @@ for config in PAR2:
 
                 waiting_new_jobs = self.env.event()
 
-                
-
                 Machines[self.Default_machine].PoolUpstream.waiting_new_jobs.append(waiting_new_jobs)
-
-                
 
                 waiting_events.append(waiting_new_jobs)
 
-                
-
                 yield env.timeout(PERMANENCE_TIME)
-
-                
 
                 yield AnyOf(self.env,waiting_events)
 
@@ -3676,145 +2969,77 @@ for config in PAR2:
 
             """  
 
-            
-
             def _Next_machine1(self):
-
-                
 
                 # workers can be transferred to external station only if there is no work to process at home dep. 
 
                 if(len(Machines[self.Default_machine].PoolUpstream) > 0 ):
 
-                     
-
                      return self.Default_machine
-
-                
 
                 possible_external_machines = list()
 
                 for i in range(N_PHASES):
 
-                    
-
                     if( i == self.Default_machine ): 
 
                         #Skip home department
 
-                        
-
                         continue 
-
-                    
 
                     if (self.skillperphase[i] > 0 and len(Machines[i].PoolUpstream) > 0 and self.Capacity_adjustment[i]>1):
 
-                        
-
                         possible_external_machines.append((i,self.skillperphase[i]))
-
-                
 
                 if len(possible_external_machines)>0:
 
-                    
-
                     possible_external_machines.sort(key=lambda x: float(x[1]), reverse=True)
-
-                    
 
                     return possible_external_machines[0][0]
 
-                
-
                 return self.Default_machine
-
-                
 
             while True:
 
-                
-
                 next_machine = _Next_machine1(self)
-
-
 
                 # Unload the worker from the current station
 
                 if self.current_machine_id != -1 and self.current_machine_id != next_machine:
 
-                    
-
                     for i in range(len(Machines[self.current_machine_id].Workers)):
-
-                    
 
                         if Machines[self.current_machine_id].Workers[i].id == self.id:
 
-                            
-
                             del(Machines[self.current_machine_id].Workers[i])
-
-
 
                             Machines[self.current_machine_id].process.interrupt()
 
-
-
                             break
-
-                
-
-
 
                 # Transfer to the next machine
 
-                
-
                 if self.current_machine_id != next_machine:
-
-                    
 
                     yield env.timeout(TRANSFER_TIME)
 
-                    
-
                     self.current_machine_id=next_machine
-
-                    
 
                     Machines[self.current_machine_id].Workers.append(self)
 
-                    
-
                     Machines[self.current_machine_id].process.interrupt()
-
-                    
 
                     if Machines[self.current_machine_id].waiting_new_workers.triggered == False:
 
-                        
-
                         Machines[self.current_machine_id].waiting_new_workers.succeed()
-
-                
-
-
 
                 start=self.env.now
 
-
-
                 waiting_events=list()
-
-                
 
                 # check again next machine in WAITING_TIME minutes
 
                 # waiting_events.append(self.env.timeout(WAITING_TIME))
-
-                
 
                 # wait the end of the current job
 
@@ -3824,23 +3049,15 @@ for config in PAR2:
 
                 waiting_events.append(end_current_job)
 
-                
-
                 # end capacity adjustment
 
                 # due to a bug for Capacity_adjustment[self.current_machine_id] infinitesimally small the program loops without processing job
 
                 if self.current_machine_id!=self.Default_machine and self.Capacity_adjustment[self.current_machine_id]>1:
 
-                    
-
                     end_capacity_adjustment=self.env.timeout(self.Capacity_adjustment[self.current_machine_id])
 
-                    
-
                     waiting_events.append(end_capacity_adjustment)
-
-                
 
                 """
 
@@ -3850,15 +3067,9 @@ for config in PAR2:
 
                     critical_workload_trigger=self.env.event()
 
-                    
-
                     Pools[self.Default_machine].workload_limit_triggers.append([self.id,beta,critical_workload_trigger])
 
-     
-
                     waiting_events.append(critical_workload_trigger)
-
-                
 
                 elif self.current_machine_id!=self.Default_machine and beta == None:
 
@@ -3868,21 +3079,13 @@ for config in PAR2:
 
                 waiting_new_jobs = self.env.event()
 
-                    
-
                 Machines[self.Default_machine].PoolUpstream.waiting_new_jobs.append(waiting_new_jobs)
 
-                    
-
                 waiting_events.append(waiting_new_jobs)
-
-
 
                 yield env.timeout(PERMANENCE_TIME)
 
                 yield AnyOf(self.env,waiting_events)
-
-                    
 
                 if self.current_machine_id!=self.Default_machine:
 
@@ -4452,7 +3655,6 @@ for config in PAR2:
         OR (Orders_release): The order release mechanism.
     """
 
-    
         def __init__(self, env, absenteeism_level_key="none", downtime_level_key="none", 
                     machine_absenteeism_type="daily"):
             """Initializes the System object.
@@ -4556,35 +3758,19 @@ for config in PAR2:
 
         # each cell represent the direct load at each station
 
-
-
         direct_WL = list(0 for i in range(N_PHASES))
-
-        
 
         for pool in pools:
 
-            
-
             for job in pool:
 
-                
-
                 for i in range(N_PHASES):
-
-                    
 
                     if job.RemainingTime[i] > 0:
 
                         direct_WL[i] += job.RemainingTime[i]
 
-                        
-
                         break
-
-                
-
-            
 
         return direct_WL        
 
@@ -4606,31 +3792,17 @@ for config in PAR2:
 
         # It does not depends on the job routing but only on the relmaining time 
 
-        
-
         aggregated_WL = list(0 for i in range(N_PHASES))
-
-        
 
         for pool in pools:
 
-            
-
             for job in pool:
-
-                
 
                 for i in range(N_PHASES):
 
-                    
-
                     if job.RemainingTime[i] > 0:
 
-                    
-
                         aggregated_WL[i] += job.RemainingTime[i]
-
-
 
         return aggregated_WL 
         
@@ -4652,33 +3824,19 @@ for config in PAR2:
 
         # corrected by the position of the job into the shop floor.
 
-        
-
         aggregated_WL = list(0 for i in range(N_PHASES))
-
-        
 
         for pool in pools:
 
-            
-
             for job in pool:
-
-                
 
                 job_contribution = job.get_CAW()
 
                 #print("CAW",job.get_CAW())
 
-                
-
                 for i in range(N_PHASES):
 
-                
-
                     aggregated_WL[i] += job_contribution[i]
-
-            
 
         #print()
 
@@ -4689,8 +3847,6 @@ for config in PAR2:
         #print(aggregated_WL)
 
         #time.sleep(5)
-
-
 
         return aggregated_WL         
 
@@ -4712,27 +3868,15 @@ for config in PAR2:
 
         # that have not been delivered yet
 
-
-
         shop_load = list(0 for i in range(N_PHASES))
-
-        
 
         for pool in pools:
 
-            
-
             for job in pool:
-
-                
 
                 for contribution_index in range(N_PHASES):
 
-                    
-
                     shop_load[contribution_index]+=job.ProcessingTime[contribution_index]        
-
-
 
         return shop_load   
 
@@ -4754,23 +3898,13 @@ for config in PAR2:
 
         # that have not been delivered yet
 
-
-
         shop_load = 0#list(0 for i in range(N_PHASES))
-
-        
 
         for pool in pools:
 
-            
-
             for job in pool:
 
-                    
-
                 shop_load+=job.ShopLoad
-
-
 
         return shop_load 
 
@@ -4792,31 +3926,17 @@ for config in PAR2:
 
         # that have not been delivered yet
 
-
-
         shop_load = list(0 for i in range(N_PHASES))
-
-        
 
         for pool in pools:
 
-            
-
             for job in pool:
-
-                
 
                 job_CSL=job.get_CSL()
 
-                
-
                 for contribution_index in range(N_PHASES):
 
-                    
-
                     shop_load[contribution_index]+=job_CSL[contribution_index]
-
-
 
         return shop_load 
 
@@ -4846,13 +3966,9 @@ for config in PAR2:
 
         -> Set WorkloadProcessed to 0    
 
-        
-
         Pools:
 
         -> Set Jobs_delivered to void 
-
-        
 
         Workers:
 
@@ -4860,70 +3976,43 @@ for config in PAR2:
 
         -> Set WorkingTime to void 
 
-        
-
         """
 
         yield env.timeout(WARMUP)
-
-        
 
         #for i in range(1000):
 
         #    print("RESETTING")
 
-            
-
-    
         in_pools = sum(len(pool) for pool in system.Pools)
         in_psp = len(system.PSP)
         in_proc = sum(1 for m in system.Machines if m.current_job is not None)
         
-
-        
         system.generator.generated_orders = in_pools + in_psp + in_proc 
-
-        
 
         for machine in system.Machines:
 
-            
-
             machine.JobsProcessed=0
 
-            
-
             machine.WorkloadProcessed=0.0
-
-        
 
         global JOBS_WARMUP
 
         while len(system.Jobs_delivered)>0:
 
-            
-
             system.Jobs_delivered.delete(0)
 
             JOBS_WARMUP += 1
 
-
-
         for worker in system.Workers:
-
-            
 
             worker.WorkloadProcessed = list(0 for i in range(N_PHASES))
 
             worker.WorkingTime = list(0 for i in range(N_PHASES))
 
-     
-
         system.OR.released_workload = list(0 for i in range(N_PHASES))
 
         system.generator.generated_processing_time = list(0 for i in range(N_PHASES))
-
-                
 
         return
 
@@ -4946,81 +4035,52 @@ for config in PAR2:
                               at regular intervals.
     """
 
-
-
         if(WARMUP!=0):
-
-        
 
             yield env.timeout(WARMUP)
 
             while(len(JOBS_DELIVERED_DEBUG)>0):
 
-                
-
                 del(JOBS_DELIVERED_DEBUG[0])
-
-            
 
             while(len(JOBS_RELEASED_DEBUG)>0):
 
-                
-
                 del(JOBS_RELEASED_DEBUG[0])
-
-            
 
             while(len(JOBS_ENTRY_DEBUG)>0):
 
-                
-
                 del(JOBS_ENTRY_DEBUG[0]) 
 
-                
-
         yield env.timeout(480/2)
-
-        
 
         global results_DEBUG
 
         results_index=0
 
-        
-
         while(env.now<SIMULATION_LENGTH-TIME_BTW_DEBUGS):
-
-            
 
             yield env.timeout(TIME_BTW_DEBUGS)
 
+            units = 0
+            if len(JOBS_DELIVERED_DEBUG) > 0:
+                units = len(JOBS_DELIVERED_DEBUG)
             
-
+            gtt = 0.0
+            sft = 0.0
+            tardiness = 0.0
+            lateness = 0.0
+            tardy = 0.0
+            std_lateness = 0.0
             
+            if units > 0:
+                gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
+                sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
+                tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
+                lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
+                tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
+                std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
 
-            if run == 0 :
-
-                
-
-                units = 0
-                if len(JOBS_DELIVERED_DEBUG) > 0:
-                    units = len(JOBS_DELIVERED_DEBUG)
-                
-                gtt = 0.0
-                sft = 0.0
-                tardiness = 0.0
-                lateness = 0.0
-                tardy = 0.0
-                std_lateness = 0.0
-                
-                if units > 0:
-                    gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
-                    sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
-                    tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
-                    lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
-                    tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
-                    std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
-
+            if run == 0:
                 result = {
                     "time": (env.now - TIME_BTW_DEBUGS),
                     "WL entry": (sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG)),
@@ -5034,142 +4094,45 @@ for config in PAR2:
                     "Tardy": tardy,
                     "STDLateness": std_lateness,
                 }
-
-                
-
-                
-
                 # Queues information
-
-                result["PSP Shop Load"]=(sum(sum(job.ProcessingTime) for job in system.PSP))
-
-                
-
+                result["PSP Shop Load"] = (sum(sum(job.ProcessingTime) for job in system.PSP))
                 sl = get_shop_load(system.Pools)
-
                 for i in range(N_PHASES):
-
-                    
-
-                    result["Shop Load-"+str(i)]=sl[i]
-
-                    
-
-                result["Total Shop Load"]=(sum(sl))
-
-                
-
+                    result["Shop Load-" + str(i)] = sl[i]
+                result["Total Shop Load"] = (sum(sl))
                 # Workers information
-
-                # worker idleness
-
-                worker_total_working_time=list()
-
+                worker_total_working_time = list()
                 for i in range(N_WORKERS):
-
-                    
-
-                    if((sum(system.Workers[i].WorkingTime)) > 0):
-
-                        
-
+                    if ((sum(system.Workers[i].WorkingTime)) > 0):
                         worker_total_working_time.append(sum(system.Workers[i].WorkingTime))
-
-                        
-
                     else:
-
-                        
-
                         worker_total_working_time.append(-1)
-
-                
-
                 for i in range(N_WORKERS):
-
-                    
-
-                    result["Worker "+str(i)+" Idleness(%)"]=(env.now-WARMUP-worker_total_working_time[i])/(env.now-WARMUP)*100
-
-                    
-
-                    result["Total Idle Time"]=((env.now-WARMUP)*5-sum(worker_total_working_time[worker.id] for worker in system.Workers))
-
-                
-
+                    result["Worker " + str(i) + " Idleness(%)"] = (env.now - WARMUP - worker_total_working_time[i]) / (
+                                env.now - WARMUP) * 100
+                    result["Total Idle Time"] = ((env.now - WARMUP) * 5 - sum(
+                        worker_total_working_time[worker.id] for worker in system.Workers))
                 # workers extra load %
-
                 for i in range(N_WORKERS):
-
-                    
-
-                    result["Worker "+str(i)+" out(%)"]=((worker_total_working_time[i]-system.Workers[i].WorkingTime[i])/worker_total_working_time[i])*100
-
-
-
+                    result["Worker " + str(i) + " out(%)"] = ((worker_total_working_time[i] -
+                                                               system.Workers[i].WorkingTime[i]) /
+                                                              worker_total_working_time[i]) * 100
                 # workers relocations
-
                 for i in range(N_WORKERS):
-
-
-
                     result["W" + str(i) + " Relocations"] = system.Workers[i].relocation[i]
-
-
-
                 for i in range(N_PHASES):
-
-
-
                     result["Workers on M" + str(i)] = len(system.Machines[i].Workers)
-
-
-
                 #Queues Length
-
                 ql = get_direct_workload(system.Pools)
-
-
-
                 for i in range(N_PHASES):
-
-
-
                     result["Queue Length-" + str(i)] = ql[i]
-
-
-
-
-
                 results_DEBUG.append(result)
-
-
-
-            
-
             else:
-                units = 0
-                if len(JOBS_DELIVERED_DEBUG) > 0:
-                    units = len(JOBS_DELIVERED_DEBUG)
-
-                gtt = 0.0
-                sft = 0.0
-                tardiness = 0.0
-                lateness = 0.0
-                tardy = 0.0
-                std_lateness = 0.0
-
-                if units > 0:
-                    gtt = sum(job.get_GTT() for job in JOBS_DELIVERED_DEBUG) / units
-                    sft = sum(job.get_SFT() for job in JOBS_DELIVERED_DEBUG) / units
-                    tardiness = sum(job.get_tardiness() for job in JOBS_DELIVERED_DEBUG) / units
-                    lateness = sum(job.get_lateness() for job in JOBS_DELIVERED_DEBUG) / units
-                    tardy = sum(job.get_tardy() for job in JOBS_DELIVERED_DEBUG) / float(units)
-                    std_lateness = np.std(np.array(list(job.get_lateness() for job in JOBS_DELIVERED_DEBUG)))
-
                 results_DEBUG[results_index]["WL entry"] += (sum(sum(job.ProcessingTime) for job in JOBS_ENTRY_DEBUG))
-                results_DEBUG[results_index]["WL released"] += (sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
-                results_DEBUG[results_index]["WL processed"] += (sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
+                results_DEBUG[results_index]["WL released"] += (
+                    sum(sum(job.ProcessingTime) for job in JOBS_RELEASED_DEBUG))
+                results_DEBUG[results_index]["WL processed"] += (
+                    sum(sum(job.ProcessingTime) for job in JOBS_DELIVERED_DEBUG))
                 results_DEBUG[results_index]["Jobs processed"] += (units)
                 results_DEBUG[results_index]["GTT"] += gtt
                 results_DEBUG[results_index]["SFT"] += sft
@@ -5178,108 +4141,44 @@ for config in PAR2:
                 results_DEBUG[results_index]["Tardy"] += tardy
                 results_DEBUG[results_index]["STDLateness"] += std_lateness
                 # Queues information
-
-                results_DEBUG[results_index]["PSP Shop Load"]+=(sum(sum(job.ProcessingTime) for job in system.PSP))
-
-                
-
+                results_DEBUG[results_index]["PSP Shop Load"] += (sum(sum(job.ProcessingTime) for job in system.PSP))
                 sl = get_shop_load(system.Pools)
-
                 for i in range(N_PHASES):
-
-                    
-
-                    results_DEBUG[results_index]["Shop Load-"+str(i)]+=sl[i]
-
-                    
-
-                results_DEBUG[results_index]["Total Shop Load"]+=(sum(sl))
-
-                
-
+                    results_DEBUG[results_index]["Shop Load-" + str(i)] += sl[i]
+                results_DEBUG[results_index]["Total Shop Load"] += (sum(sl))
                 # Workers information
-
-                # worker idleness
-
-                worker_total_working_time=list()
-
+                worker_total_working_time = list()
                 for i in range(N_WORKERS):
-
-                    
-
-                    if((sum(system.Workers[i].WorkingTime)) > 0):
-
-                        
-
+                    if ((sum(system.Workers[i].WorkingTime)) > 0):
                         worker_total_working_time.append(sum(system.Workers[i].WorkingTime))
-
-                        
-
                     else:
-
-                        
-
                         worker_total_working_time.append(-1)
-
-                
-
                 for i in range(N_WORKERS):
-
-                    
-
-                    results_DEBUG[results_index]["Worker "+str(i)+" Idleness(%)"]+=(env.now-WARMUP-worker_total_working_time[i])/(env.now-WARMUP)*100
-
-                    
-
-                    #print ("Worker "+str(i)+" Idleness(%)", (env.now-WARMUP-worker_total_working_time[i])/(env.now-WARMUP)*100)
-
-                    
-
-                    results_DEBUG[results_index]["Total Idle Time"]+=((env.now-WARMUP)*5-sum(worker_total_working_time[worker.id] for worker in system.Workers))
-
-                
-
+                    results_DEBUG[results_index]["Worker " + str(i) + " Idleness(%)"] += (
+                                env.now - WARMUP - worker_total_working_time[i]) / (env.now - WARMUP) * 100
+                    # print ("Worker "+str(i)+" Idleness(%)", (env.now-WARMUP-worker_total_working_time[i])/(env.now-WARMUP)*100)
+                    results_DEBUG[results_index]["Total Idle Time"] += (
+                                (env.now - WARMUP) * 5 - sum(worker_total_working_time[worker.id] for worker in system.Workers))
                 # workers extra load %
-
                 for i in range(N_WORKERS):
-
-                    
-
-                    results_DEBUG[results_index]["Worker "+str(i)+" out(%)"]+=((worker_total_working_time[i]-system.Workers[i].WorkingTime[i])/worker_total_working_time[i])*100
-
-
-
+                    results_DEBUG[results_index]["Worker " + str(i) + " out(%)"] += (
+                                (worker_total_working_time[i] - system.Workers[i].WorkingTime[i]) /
+                                worker_total_working_time[i]) * 100
                 # workers relocations
-
                 for i in range(N_WORKERS):
-
                     results_DEBUG[results_index]["W" + str(i) + " Relocations"] += system.Workers[i].relocation[i]
-
-
 
                 results_index+=1
 
-            
-
             while(len(JOBS_DELIVERED_DEBUG)>0):
-
-                
 
                 del(JOBS_DELIVERED_DEBUG[0])
 
-            
-
             while(len(JOBS_RELEASED_DEBUG)>0):
-
-                
 
                 del(JOBS_RELEASED_DEBUG[0])
 
-            
-
             while(len(JOBS_ENTRY_DEBUG)>0):
-
-                
 
                 del(JOBS_ENTRY_DEBUG[0])        
 
@@ -5291,21 +4190,13 @@ for config in PAR2:
     for easy identification and comparison of results from different scenarios.
     """
 
-            
-
         global  results_DEBUG      
 
         # Record one performance over time 
 
-
-
         access_type='w'
 
-
-
         with open('daily_RUN_DEBUG5_'+RELEASE_RULE+"_"+WORKER_MODE+ "_" + WORKER_FLEXIBILITY +"_"+str(WORKLOAD_NORMS[WLIndex])+'.csv', access_type) as csvfile:
-
-            
 
             fieldnames = [
 
@@ -5346,23 +4237,15 @@ for config in PAR2:
             'Constraint Switches'
             ]
 
-            
-
             # Queues information
 
             fieldnames.append("PSP Shop Load")
 
             for i in range(N_PHASES):
 
-                
-
                 fieldnames.append("Shop Load-"+str(i))
 
-                
-
             fieldnames.append("Total Shop Load")
-
-            
 
             # Workers information
 
@@ -5370,71 +4253,39 @@ for config in PAR2:
 
             for i in range(N_WORKERS):
 
-                
-
                 fieldnames.append("Worker "+str(i)+" Idleness(%)")
 
-                
-
             fieldnames.append("Total Idle Time")
-
-            
 
             # workers extra load %
 
             for i in range(N_WORKERS):
 
-                
-
                 fieldnames.append("Worker "+str(i)+" out(%)")
-
-
 
             # workers relocations
 
             for i in range(N_WORKERS):
 
-
-
                 fieldnames.append("W" + str(i) + " Relocations")
-
-
 
             # workers on each machine
 
             for i in range(N_PHASES):
 
-
-
                 fieldnames.append("Workers on M" + str(i))
-
-
 
             #queues information
 
             for i in range(N_PHASES):
 
-
-
                 fieldnames.append("Queue Length-" + str(i))
-
-                
 
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-            
-
             #if(run==0):
 
-            
-
             writer.writeheader()
-
-            
-
-
-
-            
 
             CURTIME = 0
 
@@ -5442,15 +4293,9 @@ for config in PAR2:
 
             CURTIME += 480/2
 
-            
-
             index=0
 
-                
-
             while(CURTIME<SIMULATION_LENGTH-TIME_BTW_DEBUGS):
-
-                
 
                 #print(CURTIME,SIMULATION_LENGTH,TIME_BTW_DEBUGS)
 
@@ -5460,17 +4305,11 @@ for config in PAR2:
 
                 #print(N_SIMULATION_RUNS)
 
-                
-
-                
-
                 row = {}
 
                 #print(results_DEBUG)
 
                 row = {
-
-                    
 
                     "RELEASE_RULE":RELEASE_RULE,
 
@@ -5479,8 +4318,6 @@ for config in PAR2:
                     "Workload":WORKLOAD_NORMS[WLIndex],
 
                     "time":results_DEBUG[index]["time"],
-
-                    
 
                     "WL entry":(results_DEBUG[index]["WL entry"]/N_SIMULATION_RUNS),
 
@@ -5502,94 +4339,55 @@ for config in PAR2:
 
                     "STDLateness":(results_DEBUG[index]["STDLateness"]/N_SIMULATION_RUNS),
 
-                    
-                   
-
-
-
                 }
 
                 #print(results_DEBUG[index]["GTT"])
-
-                
 
                 # Queues information
 
                 row["PSP Shop Load"]=(results_DEBUG[index]["PSP Shop Load"]/N_SIMULATION_RUNS)
 
-                
-
                 for i in range(N_PHASES):
-
-                    
 
                     row["Shop Load-"+str(i)]=(results_DEBUG[index]["Shop Load-"+str(i)]/N_SIMULATION_RUNS)
 
-                    
-
                 row["Total Shop Load"]=(results_DEBUG[index]["Total Shop Load"]/N_SIMULATION_RUNS)
-
-                
 
                 # Workers information
 
                 # worker idleness
 
-                
-
                 for i in range(N_WORKERS):
-
-                    
 
                     row["Worker "+str(i)+" Idleness(%)"]=(results_DEBUG[index]["Worker "+str(i)+" Idleness(%)"]/N_SIMULATION_RUNS)
 
-                    
-
                     row["Total Idle Time"]=(results_DEBUG[index]["Total Idle Time"]/N_SIMULATION_RUNS)
-
-                
 
                 # workers extra load %
 
                 for i in range(N_WORKERS):
 
-                    
-
                     row["Worker "+str(i)+" out(%)"]=(results_DEBUG[index]["Worker "+str(i)+" out(%)"]/N_SIMULATION_RUNS)
-
-
 
                 # workers relocation
 
                 for i in range(N_WORKERS):
 
-
-
                     row["W" + str(i) + " Relocations"] = (
 
                             results_DEBUG[index]["W" + str(i) + " Relocations"] / N_SIMULATION_RUNS)
-
-
 
                 # workers on each machine
 
                 for i in range(N_PHASES):
 
-
-
                     row["Workers on M" + str(i)] = results_DEBUG[index]["Workers on M" + str(i)]
-
-
 
                 #queues information
 
                 for i in range(N_PHASES):
 
-
-
                     row["Queue Length-" + str(i)] = (results_DEBUG[index]["Queue Length-" + str(i)] / N_SIMULATION_RUNS)
-
-                    
 
                 writer.writerow(row)
 
@@ -5612,31 +4410,17 @@ for config in PAR2:
         simpy.events.Timeout: A timeout event to schedule the next screen update.
     """
 
-        
-
         while 1:
-
-                    
 
             yield env.timeout(TIME_BTW_SCREEN_DEBUGS)
 
-            
-
             FinishedUnits = -1
-
-            
 
             if len(system.Jobs_delivered)>0:
 
-                
-
                 FinishedUnits=len(system.Jobs_delivered)
 
-            
-
             print("\n" * 20) # Clear the screen
-
-            
 
             #   run info
 
@@ -5644,15 +4428,9 @@ for config in PAR2:
 
             done_simulations = max(1,(WLIndex*(LAST_RUN-FIRST_RUN) + run))
 
-            
-
-            
-
             print ("### Day:%d - Rel.rule: %s - Work.Mode: %s - Run: %d - WLN:%d - runs: %d/%d \t remaining time:%d h\t%d h\t###\n"%(env.now/480,RELEASE_RULE,WORKER_MODE,run,WORKLOAD_NORMS[WLIndex],done_simulations, total_simulations, (total_simulations-done_simulations)*(time.time()-start)/done_simulations/60/60,(time.time()-start)/60/60))
 
             print("\n")
-
-            
 
             #   pools info
 
@@ -5660,236 +4438,50 @@ for config in PAR2:
 
             CAW = get_corrected_aggregated_workload(system.Pools)     
 
-            
-
             print("PSP - %d jobs"%(len(system.PSP)))
-
-            
 
             for index_pool in range(len(system.Pools)):
 
-                
-
                 print("Pool: %d \t %d jobs \t SL:%d \t CAW - %d"%(system.Pools[index_pool].id, len(system.Pools[index_pool]),SL[index_pool],CAW[index_pool]))
 
-            
-
             print("Jobs_delivered - %d jobs\n"%(FinishedUnits))
-
-        
 
             print((sum(sum(worker.WorkingTime) for worker in system.Workers))/(env.now*5))
 
             print()
 
-
-            
-
-            if (env.now > WARMUP):
-
-                
-
-                net_time=env.now-WARMUP
-
-                #   machines info
-
-                for machine in system.Machines:
-
-                    
-
-                    print("Machine %d \t Jobs processed %d \t WL processed %f \t Eff. %f \t Utilization %f" %(machine.id, machine.JobsProcessed, machine.WorkloadProcessed,machine.efficiency, machine.WorkloadProcessed/(net_time)))
-
-                
-
-                print("\n")
-
-                
-
-                #   Workers info
-
-                for worker in system.Workers:
-
-                    
-
-                    sumworkingtime = sum(worker.WorkingTime)
-
-                    sWorkingTime = [str(round(wt/(net_time)*100,2)) for wt in worker.WorkingTime]
-
-                    
-
-                    print("Worker:%d \t Current machine:%d\t"%(worker.id, worker.current_machine_id) + "\t ".join(sWorkingTime) +"\t Home:"+ str(round(worker.WorkingTime[worker.Default_machine]/net_time,2))+"\t Idle:"+ str(round((net_time-sumworkingtime)/float(net_time)*100,2)) +"\t% out: " + str(round((sum(worker.WorkingTime) - worker.WorkingTime[worker.Default_machine])/(net_time)*100,2)))
-
-                    print(sumworkingtime/net_time)
-
-                if RELEASE_RULE=="AL_MOD":
-
-                    
-
-                    print("MAX extra cap per phase: ", "\t".join(list(str(sum(worker.Capacity_adjustment[i] for worker in system.Workers)) for i in range(N_PHASES))))
-
-
-
-                #   System info
-
-                print("\nAvg. Job generator output rate: %f" %(system.generator.generated_orders/float(net_time)))
-
-                print("Avg. Jobs delivered rate[jobs/day]: %f" %(FinishedUnits/float(net_time)))
-
-                print("Jobs delivered/Jobs generated: %f"%((FinishedUnits)/float(system.generator.generated_orders)))
-
-
-
-                """
-
-                z = (str(PT) for PT in system.generator.generated_processing_time)
-
-                print("WL generated:\t", "\t".join(z))            
-
-                
-
-                print("WL released:\t", "\t".join((str(PT) for PT in system.OR.released_workload)))
-
-                print("Machine WL:\t", "\t".join(str(machine.WorkloadProcessed) for machine in system.Machines))
-
-                
-
-                y = (str(round(sum(worker.WorkloadProcessed[i] for worker in system.Workers),6)) for i in range(N_PHASES))            
-
-                print("Worker WL:\t", "\t".join(y))
-
-                
-
-                x = (str(sum(job.ProcessingTime[i] for job in system.Jobs_delivered)) for i in range(N_PHASES))
-
-                print("Jobs total WL:\t", "\t".join(x))
-
-                
-
-                print(sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)/sum(sum(worker.WorkloadProcessed) for worker in system.Workers))
-
-                print()
-
-                
-
-                print("RELEASED/GENERATED\t", (sum(PT for PT in system.OR.released_workload)/(sum(PT for PT in system.generator.generated_processing_time))))
-
-                print("PROC. Work/RELEASED\t", (sum(sum(worker.WorkloadProcessed[i] for worker in system.Workers)for i in range(N_PHASES)) /sum(PT for PT in system.OR.released_workload)))
-
-                print("PROC. Mach/RELEASED\t", (sum(machine.WorkloadProcessed for machine in system.Machines) /sum(PT for PT in system.OR.released_workload)))
-
-                print("DELIVERED/PROC. Mach\t", (sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)/sum(machine.WorkloadProcessed for machine in system.Machines)))
-
-                """
-
-                
-
-                
-
-            else:
-
-                
-
-                #   machines info
-
-                for machine in system.Machines:
-
-                    
-
-                    print("Machine %d \t Jobs processed %d \t WL processed %f\t Eff. %f  \t Utilization %f" %(machine.id, machine.JobsProcessed, machine.WorkloadProcessed,machine.efficiency, machine.WorkloadProcessed/(env.now)))
-
-                
-
-                print("\n")
-
-                #   Workers info
-
-                for worker in system.Workers:
-
-                    
-
-                    sumworkingtime = sum(worker.WorkingTime)
-
-                    sWorkingTime = [str(round(wt/env.now*100,2)) for wt in worker.WorkingTime]
-
-                    
-
-                    print("Worker:%d \t Current machine:%d\t"%(worker.id, worker.current_machine_id) + "\t ".join(sWorkingTime) +"\t Home:"+"\t Idle:"+ str(round((env.now-sumworkingtime)/float(env.now)*100,2)) +"\t% out: " + str(round((sum(worker.WorkingTime) - worker.WorkingTime[worker.Default_machine])/env.now*100,2)))
-
-                
-
-                if RELEASE_RULE=="AL_MOD":
-
-                    
-
-                    print("MAX extra cap per phase: ", "\t".join(list(str(sum(worker.Capacity_adjustment[i] for worker in system.Workers)) for i in range(N_PHASES))))
-
-                    
-
-                #   System info
-
-                print("\nAvg. Job generator output rate: %f" %(system.generator.generated_orders/float(env.now)))
-
-                print("Avg. Jobs delivered rate[jobs/day]: %f" %(FinishedUnits/float(env.now)))
-
-                print("Jobs delivered/Jobs generated: %f"%((FinishedUnits)/float(system.generator.generated_orders)))
-
-                
-
-                """
-
-                z = (str(PT) for PT in system.generator.generated_processing_time)
-
-                print("WL generated:\t", "\t".join(z))            
-
-                
-
-                print("WL released:\t", "\t".join((str(PT) for PT in system.OR.released_workload)))
-
-                print("Machine WL:\t", "\t".join(str(machine.WorkloadProcessed) for machine in system.Machines))
-
-                
-
-                y = (str(round(sum(worker.WorkloadProcessed[i] for worker in system.Workers),6)) for i in range(N_PHASES))            
-
-                print("Worker WL:\t", "\t".join(y))
-
-                
-
-                #a = ((float(z[i]) - float(y[i])) for i in range(N_PHASES))
-
-                
-
-                #print("Generated-processed total WL:", "\t".join(str(i) for i in a))
-
-
-
-                
-
-                #print("Jobs total WL:", sum(sum(job.ProcessingTime) for job in system.Jobs_delivered))
-
-                x = (str(sum(job.ProcessingTime[i] for job in system.Jobs_delivered)) for i in range(N_PHASES))
-
-                print("Jobs total WL:\t", "\t".join(x))
-
-                
-
-                print(sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)/sum(sum(worker.WorkloadProcessed) for worker in system.Workers))
-
-                print()
-
-                
-
-                print("RELEASED/GENERATED\t", (sum(PT for PT in system.OR.released_workload)/(sum(PT for PT in system.generator.generated_processing_time))))
-
-                print("PROC. Work/RELEASED\t", (sum(sum(worker.WorkloadProcessed[i] for worker in system.Workers)for i in range(N_PHASES)) /sum(PT for PT in system.OR.released_workload)))
-
-                print("PROC. Mach/RELEASED\t", (sum(machine.WorkloadProcessed for machine in system.Machines) /sum(PT for PT in system.OR.released_workload)))
-
-                print("DELIVERED/PROC. Mach\t", (sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)/sum(machine.WorkloadProcessed for machine in system.Machines)))
-
-                """
-
-            
+            net_time = env.now
+            if env.now > WARMUP:
+                net_time -= WARMUP
+
+            # Machines info
+            for machine in system.Machines:
+                print("Machine %d \t Jobs processed %d \t WL processed %f \t Eff. %f \t Utilization %f" % (
+                machine.id, machine.JobsProcessed, machine.WorkloadProcessed, machine.efficiency,
+                machine.WorkloadProcessed / net_time))
+            print("\n")
+
+            # Workers info
+            for worker in system.Workers:
+                sumworkingtime = sum(worker.WorkingTime)
+                sWorkingTime = [str(round(wt / net_time * 100, 2)) for wt in worker.WorkingTime]
+                print("Worker:%d \t Current machine:%d\t" % (worker.id, worker.current_machine_id) + "\t ".join(
+                    sWorkingTime) + "\t Home:" + str(
+                    round(worker.WorkingTime[worker.Default_machine] / net_time, 2)) + "\t Idle:" + str(
+                    round((net_time - sumworkingtime) / float(net_time) * 100, 2)) + "\t% out: " + str(
+                    round((sum(worker.WorkingTime) - worker.WorkingTime[worker.Default_machine]) / net_time * 100, 2)))
+                if env.now > WARMUP:
+                    print(sumworkingtime / net_time)
+
+            if RELEASE_RULE == "AL_MOD":
+                print("MAX extra cap per phase: ",
+                      "\t".join(list(str(sum(worker.Capacity_adjustment[i] for worker in system.Workers)) for i in
+                                     range(N_PHASES))))
+
+            # System info
+            print("\nAvg. Job generator output rate: %f" % (system.generator.generated_orders / float(net_time)))
+            print("Avg. Jobs delivered rate[jobs/day]: %f" % (FinishedUnits / float(net_time)))
+            print("Jobs delivered/Jobs generated: %f" % ((FinishedUnits) / float(system.generator.generated_orders)))
 
             #print("GTT", sum(job.get_GTT() for job in system.Jobs_delivered)/len(system.Jobs_delivered))
 
@@ -5940,40 +4532,21 @@ for config in PAR2:
 
     # MAIN
 
-
     for WLIndex in range(0,len(WORKLOAD_NORMS)):             
-
-
-
-
 
         for run in range(FIRST_RUN, LAST_RUN):
 
-
-
             np.random.seed(54363*run)
-
-            
 
             env = simpy.Environment()
 
-            
-
             system = System(env, ABSENTEEISM_LEVEL, DOWNTIME_LEVEL, MACHINE_ABSENTEEISM_TYPE)
-
-            
-
-            
-
-            
 
             if WARMUP!=0:
 
                 # Reset statistics after WARMUP time units
 
                 env.process(ResetStatistics(env, WARMUP,system))    
-
-
 
             # <if run debug>
 
@@ -5983,35 +4556,18 @@ for config in PAR2:
 
             # </>
 
-            
-
             if SCREEN_DEBUG:
-
-                
 
                 env.process(screenDebug(env, run,system))            
 
-
-
             env.run(until = SIMULATION_LENGTH)
-
-            
-
-
-
-            
 
             FinishedUnits = -1
 
-            
-
             if len(system.Jobs_delivered) > 0:
-
-                
 
                 FinishedUnits = len(system.Jobs_delivered)
 
-            
             if len(system.Jobs_delivered) > 0:
                 jobs = system.Jobs_delivered.get_list()
                 net_time = env.now - WARMUP
@@ -6035,90 +4591,53 @@ for config in PAR2:
                 
                 UNIFIED_RESULTS.append(run_result)
                     
-
             if CSV_OUTPUT_JOBS is True or CSV_OUTPUT_SYSTEM is True:
-
-                
 
                 access_type = 'w'
 
-                
-
                 if run > 0 or WLIndex > 0:
-
-                    
 
                     access_type = 'a'
 
-                
-
                 if CSV_OUTPUT_JOBS is True:
-
-                    
 
                     # write the infomation of all completed job
 
                     with open('JobsOutput_' + RELEASE_RULE + "_" + WORKER_MODE + "_" + WORKER_FLEXIBILITY + "_" + str(WORKLOAD_NORMS[WLIndex]) + "_" + str(run) + '.csv', access_type) as csvfile:
 
-                        
-
                         fieldnames = ['Workload','nrun','id', 'Arrival Date', 'Due Date', 'Completation Date', 'GTT','SFT','Tardiness','Lateness']
-
-                        
 
                         for i in range(N_PHASES):
 
-                            
-
                             fieldnames.append("PT("+str(i)+")")
-
-
 
                         for i in range(N_PHASES):
 
                             fieldnames.append("SFT(" + str(i) + ")")
 
-
-
                         for i in range(N_PHASES):
 
                             fieldnames.append("Lead Time(" + str(i) + ")")
-
-
 
                         for i in range(N_PHASES):
 
                             fieldnames.append("Arrival date Queue M(" + str(i) + ")")
 
-
-
                         for i in range(N_PHASES):
 
                             fieldnames.append("Arrival date on M(" + str(i) + ")")
-
-
 
                         for i in range(N_PHASES):
 
                             fieldnames.append("Completion date on M(" + str(i) + ")")
 
-
-
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-                        
 
                         if  access_type=='w':
 
-
-
                             writer.writeheader()
 
-                        
-
                         for job in system.Jobs_delivered.get_list():
-
-                            
 
                             row={
 
@@ -6144,67 +4663,35 @@ for config in PAR2:
 
                                 }
 
-                            
-
                             for i in range(N_PHASES):
-
-                                
 
                                 row["PT("+str(i)+")"] = job.ProcessingTime[i]
 
-
-
                             SFT_each_Machine = job.get_SFT_Machines()
 
-
-
                             for i in range(N_PHASES):
-
-
 
                                 row["SFT(" + str(i) + ")"] = SFT_each_Machine[i]
 
-
-
                             LT_each_Machine = job.get_LT_Machines()
 
-
-
                             for i in range(N_PHASES):
-
-
 
                                 row["Lead Time(" + str(i) + ")"] = LT_each_Machine[i]
 
-
-
                             for i in range(N_PHASES):
-
-
 
                                 row["Arrival date Queue M(" + str(i) + ")"] = job.ArrivalDateQueue[i]
 
-
-
                             for i in range(N_PHASES):
-
-
 
                                 row["Arrival date on M(" + str(i) + ")"] = job.ArrivalDateMachines[i]
 
-
-
                             for i in range(N_PHASES):
-
-
 
                                 row["Completion date on M(" + str(i) + ")"] = job.CompletationDateMachines[i]
 
-                            
-
                             writer.writerow(row)
-
-
 
                 if CSV_OUTPUT_SYSTEM is True:
                     
@@ -6217,8 +4704,6 @@ for config in PAR2:
                     str(STARVATION_AVOIDANCE) + "_" + WORKER_FLEXIBILITY + "_" + 
                     str(WORKER_EFFICIENCY_DECREMENT) +  '.csv',
                     access_type) as csvfile:
-
-                        
 
                         fieldnames = [
 
@@ -6236,8 +4721,6 @@ for config in PAR2:
 
                         'Shoplength',
 
-                        
-
                         'nrun', 
 
                         #'Job Entry',
@@ -6245,8 +4728,6 @@ for config in PAR2:
                         'Exit Rate',
 
                         'Total Processed Workload',
-
-                        
 
                         #Jobs intormation
 
@@ -6256,23 +4737,15 @@ for config in PAR2:
 
                         ]
 
-                        
-
                         # Queues information
 
                         fieldnames.append("PSP Shop Load")
 
                         for i in range(N_PHASES):
 
-                            
-
                             fieldnames.append("Shop Load-"+str(i))
 
-                            
-
                         fieldnames.append("Total Shop Load")
-
-                        
 
                         # Workers information
 
@@ -6280,33 +4753,21 @@ for config in PAR2:
 
                         for i in range(N_WORKERS):
 
-                            
-
                             for j in range(N_PHASES):   
 
-                                
-
                                 fieldnames.append("W"+str(i)+"-M"+str(j))
-
-                        
 
                         # worker idleness
 
                         for i in range(N_WORKERS):
 
-                            
-
                             fieldnames.append("W"+str(i)+" Idleness")
-
-
 
                         # worker relocations
 
                         for i in range(N_WORKERS):
 
                             fieldnames.append("W" + str(i) + " Relocations")
-
-
 
                         # workers relocation to a specific machine
 
@@ -6316,35 +4777,21 @@ for config in PAR2:
 
                                 fieldnames.append("Rel-W" + str(i) + "-M" + str(j))
 
-                            
-
                         # Machines
 
                         for i in range(N_PHASES):
 
-                            
-
                             fieldnames.append("Machine "+str(i)+" eff.(%)")
-
-                        
 
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-                        
-
                         if  access_type=='w':
 
-
-
                             writer.writeheader()
-
-                        
 
                         net_time=env.now-WARMUP
 
                         jobs = system.Jobs_delivered.get_list()
-
-                        
 
                         row = {
 
@@ -6354,31 +4801,19 @@ for config in PAR2:
 
                             'Worker mode':WORKER_MODE,
 
-                            
-
                             'StarvationAvoidance':str(STARVATION_AVOIDANCE),
 
                             'Shopflow':SHOP_FLOW,
 
                             'Shoplength':str(SHOP_LENGTH),
 
-                            
-
-                            
-
-                            
-
                             'nrun':run,
 
                             #'Job Entry':((generator.generated_orders-len(Rejected_orders))/float(generator.generated_orders)),
 
-                            
-
                             'Exit Rate':(FinishedUnits/float(net_time)),
 
                             'Total Processed Workload':(sum(sum(job.ProcessingTime) for job in system.Jobs_delivered)),                    
-
-                            
 
                             'Av. GTT': (sum(job.get_GTT() for job in jobs)/FinishedUnits),
 
@@ -6392,65 +4827,39 @@ for config in PAR2:
 
                             'STD Lateness':(np.std(np.array(list(job.get_lateness() for job in jobs)))),
 
-
-
                             }
-
-                            
-
-                            
 
                         # Queues information
 
                         sl = get_shop_load(system.Pools)
 
-                        
-
                         row["PSP Shop Load"]=(sum(sum(job.ProcessingTime) for job in system.PSP))
 
                         for i in range(N_PHASES):
 
-                            
-
                             row["Shop Load-"+str(i)]=sl[i]
 
-                            
-
                         row["Total Shop Load"]=(sum(sl))
-
-                        
 
                         # Workers information
 
                         for i in range(N_WORKERS):
 
-                            
-
                             for j in range(N_PHASES):   
 
-                                
-
                                 row["W"+str(i)+"-M"+str(j)]=(system.Workers[i].WorkingTime[j])/(net_time)
-
-                        
 
                         # worker idleness
 
                         for i in range(N_WORKERS):
 
-                            
-
                             row["W"+str(i)+" Idleness"]=(net_time-sum(system.Workers[i].WorkingTime))/(net_time)
-
-
 
                         # worker total relocations
 
                         for i in range(N_WORKERS):
 
                             row["W" + str(i) + " Relocations"] = system.Workers[i].relocation[i]
-
-
 
                         # subdivision of workers relocations
 
@@ -6460,23 +4869,13 @@ for config in PAR2:
 
                                 row["Rel-W" + str(i) + "-M" + str(j)] = system.Workers[i].relocation[j]
 
-                        
-
-                           
-
                         # Machines
 
                         for machine in system.Machines:
 
-                            
-
                             row["Machine "+str(machine.id)+" eff.(%)"]=(machine.WorkloadProcessed/(net_time))
 
-                            
-
                         writer.writerow(row)
-
-        
 
         # <if run debug>
 
